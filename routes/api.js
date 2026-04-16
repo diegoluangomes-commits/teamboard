@@ -400,11 +400,11 @@ router.post('/notify', async (req, res) => {
 
     let subject = '', text = '';
     if (type === 'task_assigned') {
-      subject = `[TeamBoard] Nova tarefa atribuída a você: ${taskName}`;
-      text    = `Olá ${owner.name},\n\nUma nova tarefa foi atribuída a você por ${fromName}:\n\n📋 ${taskName}\n\nAcesse o TeamBoard para ver os detalhes.\n\nTeamBoard`;
+      subject = `[TeamSolidez] Nova tarefa atribuída a você: ${taskName}`;
+      text    = `Olá ${owner.name},\n\nVocê recebeu uma nova tarefa no TeamSolidez!\n\n📋 Tarefa: ${taskName}\n👤 Atribuída por: ${fromName}\n\nAcesse o sistema para ver todos os detalhes, período e status da tarefa:\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     } else if (type === 'comment_mention') {
-      subject = `[TeamBoard] Você foi mencionado em um comentário`;
-      text    = `Olá ${owner.name},\n\n${fromName} mencionou você em um comentário na tarefa "${taskName}":\n\n💬 "${comment}"\n\nAcesse o TeamBoard para responder.\n\nTeamBoard`;
+      subject = `[TeamSolidez] Você foi mencionado em um comentário`;
+      text    = `Olá ${owner.name},\n\n${fromName} mencionou você em um comentário na tarefa "${taskName}":\n\n💬 "${comment}"\n\nAcesse o sistema para responder:\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     }
 
     const nodemailer = require('nodemailer');
