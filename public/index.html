@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TeamBoard</title>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo" onclick="goPage('projects')">
+    <div class="logo-dot"></div>
+    TeamBoard
+    <span id="breadcrumb" class="breadcrumb">/ Projetos</span>
+  </div>
+  <div class="top-right">
+    <div id="local-user-info" style="display:flex;align-items:center;gap:7px"></div>
+    <div style="width:0.5px;height:18px;background:var(--border2);margin:0 2px"></div>
+    <div style="position:relative;cursor:pointer" onclick="goPage('notif')">
+      <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8.5 2a4.5 4.5 0 0 1 4.5 4.5v3l1.5 2.5H2.5L4 9.5V6.5A4.5 4.5 0 0 1 8.5 2z"/><path d="M7 14a1.5 1.5 0 0 0 3 0"/></svg>
+      <div id="notif-dot" style="position:absolute;top:-1px;right:-2px;width:7px;height:7px;border-radius:50%;background:#E24B4A;border:1.5px solid white;display:none"></div>
+    </div>
+    <button class="btn btn-blue" onclick="openTaskModal()">+ Nova tarefa</button>
+    <div id="top-user" class="top-user hidden">
+      <img id="top-avatar" src="" alt="" class="top-avatar"/>
+      <span id="top-name"></span>
+      <a href="/auth/logout" class="btn btn-sm">Sair</a>
+    </div>
+    <button id="btn-connect" class="btn btn-google btn-sm" onclick="window.location='/auth/google'">
+      <svg width="13" height="13" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Conectar Google
+    </button>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar">
+    <div class="ns">Principal</div>
+    <div class="ni act" id="ni-projects" onclick="goPage('projects')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor"><rect x="1" y="1" width="4.5" height="4.5" rx="1"/><rect x="7.5" y="1" width="4.5" height="4.5" rx="1"/><rect x="1" y="7.5" width="4.5" height="4.5" rx="1"/><rect x="7.5" y="7.5" width="4.5" height="4.5" rx="1"/></svg>
+      Projetos
+    </div>
+    <div class="ni" id="ni-board" onclick="goPage('board')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="11" height="11" rx="1.5"/><line x1="1" y1="5" x2="12" y2="5"/><line x1="4.5" y1="1" x2="4.5" y2="12"/></svg>
+      Quadro
+    </div>
+    <div class="ni" id="ni-templates" onclick="goPage('templates')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="11" height="11" rx="1.5"/><line x1="4" y1="1" x2="4" y2="12"/><line x1="4" y1="5" x2="12" y2="5"/></svg>
+      Modelos de tarefa
+    </div>
+    <div class="ni" id="ni-cal" onclick="goPage('cal')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="11" height="10" rx="1.5"/><line x1="4" y1="1" x2="4" y2="3.5"/><line x1="9" y1="1" x2="9" y2="3.5"/><line x1="1" y1="5.5" x2="12" y2="5.5"/></svg>
+      Calendário
+    </div>
+    <div class="ni" id="ni-notif" onclick="goPage('notif')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6.5 1.5a4 4 0 0 1 4 4v2.5l1.2 2H1.3L2.5 8V5.5a4 4 0 0 1 4-4z"/><path d="M5.3 12a1.2 1.2 0 0 0 2.4 0"/></svg>
+      Notificações
+      <span id="nb" style="margin-left:auto;background:#FCEBEB;color:#A32D2D;font-size:10px;padding:0 5px;border-radius:8px;display:none"></span>
+    </div>
+    <div class="ns" style="margin-top:4px">Cadastros</div>
+    <div class="ni" id="ni-clients" onclick="goPage('clients')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="11" height="9" rx="1.5"/><line x1="1" y1="5" x2="12" y2="5"/></svg>
+      Clientes
+    </div>
+    <div class="ni" id="ni-products" onclick="goPage('products')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="9" height="8" rx="1.2"/><path d="M4 3V2a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/></svg>
+      Produtos
+    </div>
+    <div class="ni" id="ni-owners" onclick="goPage('owners')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6.5" cy="4.5" r="2.3"/><path d="M1.5 11.5c0-2.5 2.2-4 5-4s5 1.5 5 4"/></svg>
+      Responsáveis
+    </div>
+    <div class="ni" id="ni-sellers" onclick="goPage('sellers')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5" cy="4.5" r="2.3"/><path d="M0.5 11.5c0-2.5 2-4 4.5-4"/><polyline points="8,8 9.5,9.5 12,7"/></svg>
+      Vendedores
+    </div>
+    <div class="ni" id="ni-users" onclick="goPage('users')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="4.5" cy="4" r="2"/><path d="M0.5 11c0-2 1.8-3.5 4-3.5s4 1.5 4 3.5"/><circle cx="10" cy="4.5" r="1.5"/><path d="M10 7.5c1.5 0 2.5 1 2.5 2.5"/></svg>
+      Usuários
+    </div>
+    <div class="ns" style="margin-top:4px">Projetos</div>
+    <div style="padding:4px 10px 4px">
+      <div style="position:relative;display:flex;align-items:center">
+        <svg style="position:absolute;left:7px;pointer-events:none;flex-shrink:0" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="var(--text3)" stroke-width="1.5"><circle cx="5" cy="5" r="3.5"/><line x1="8" y1="8" x2="11" y2="11"/></svg>
+        <input id="sidebar-proj-search" oninput="renderProjNav()" placeholder="Buscar projeto..." style="width:100%;padding:4px 8px 4px 22px;font-size:11px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface2);color:var(--text)"/>
+      </div>
+    </div>
+    <div id="proj-nav-list"></div>
+    <div class="ni new-proj-ni" onclick="openProjModal()">
+      <span class="plus-icon">+</span> Novo projeto
+    </div>
+  </nav>
+
+  <div class="content">
+
+    <!-- Projetos -->
+    <div class="page active" id="page-projects">
+      <div class="ph">
+        <div class="ptitle">Projetos</div>
+        <div class="ctrls">
+          <div style="position:relative;display:flex;align-items:center">
+            <svg style="position:absolute;left:8px;pointer-events:none" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="var(--text3)" stroke-width="1.5"><circle cx="5" cy="5" r="3.5"/><line x1="8" y1="8" x2="11" y2="11"/></svg>
+            <input id="proj-search" oninput="renderProjGrid()" placeholder="Pesquisar projeto..." style="padding:5px 10px 5px 26px;font-size:12px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);width:200px"/>
+          </div>
+          <button class="btn btn-blue" onclick="openProjModal()">+ Novo projeto</button>
+        </div>
+      </div>
+      <div class="proj-grid" id="proj-grid"></div>
+    </div>
+
+    <!-- Quadro -->
+    <div class="page" id="page-board">
+      <div class="ph">
+        <div class="ptitle" id="board-lbl">Quadro</div>
+        <div class="ctrls">
+          <select id="fil-owner" onchange="renderBoard()"><option value="">Todos</option></select>
+          <select id="fil-status" onchange="renderBoard()">
+            <option value="">Todos status</option>
+            <option value="done">Concluído</option>
+            <option value="progress">Em andamento</option>
+            <option value="pending">Pendente</option>
+            <option value="na">Não aplicável</option>
+            <option value="cancel">Cliente desmarcou</option>
+          </select>
+          <select id="fil-group" onchange="renderBoard()">
+            <option value="">Todos grupos</option>
+            <option value="0">Onboarding</option>
+            <option value="1">Preparação de base</option>
+            <option value="2">Treinamento</option>
+            <option value="3">Acompanhamento</option>
+          </select>
+          <div class="vtabs">
+            <div class="vt act" onclick="switchView('tbl',this)">Tabela</div>
+            <div class="vt" onclick="switchView('kan',this)">Kanban</div>
+          </div>
+          <button class="btn btn-green" onclick="exportCSV()">↓ CSV</button>
+        </div>
+      </div>
+      <div class="sbar">
+        <div class="sc"><div class="slabel">Total</div><div class="sval" id="s-tot">0</div></div>
+        <div class="sc"><div class="slabel">Concluídas</div><div class="sval green" id="s-dn">0</div></div>
+        <div class="sc"><div class="slabel">Em andamento</div><div class="sval blue" id="s-pr">0</div></div>
+        <div class="sc"><div class="slabel">Pendentes</div><div class="sval amber" id="s-pe">0</div></div>
+        <div class="sc"><div class="slabel">Desmarcou</div><div class="sval red" id="s-ca">0</div></div>
+        <div class="sc flex1"><div class="slabel">Progresso</div><div class="sval" id="s-pct">0%</div><div class="pbar"><div id="s-bar" style="height:100%;background:#3B6D11;border-radius:2px;width:0%;transition:width .3s"></div></div></div>
+      </div>
+      <div id="view-tbl"><div id="groups-cont"></div></div>
+      <div id="view-kan" style="display:none"><div class="kboard" id="kboard"></div></div>
+    </div>
+
+    <!-- Modelos de Tarefa -->
+    <div class="page" id="page-templates">
+      <div class="ph"><div class="ptitle">Modelos de tarefa</div><button class="btn btn-purple" onclick="openTemplateModal()">+ Novo modelo</button></div>
+      <div class="notice-info">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="#185FA5" stroke-width="1.3"><circle cx="6.5" cy="6.5" r="5"/><line x1="6.5" y1="4" x2="6.5" y2="7"/><circle cx="6.5" cy="9" r=".5" fill="#185FA5"/></svg>
+        Crie modelos com as tarefas padrão. Ao criar um novo projeto, escolha um modelo e todas as tarefas serão criadas automaticamente.
+      </div>
+      <div id="templates-list"></div>
+    </div>
+
+    <!-- Calendário -->
+    <div class="page" id="page-cal">
+      <div class="ph">
+        <div class="ptitle">Calendário</div>
+        <div class="ctrls">
+          <button class="btn" onclick="calNav(-1)">&#8592;</button>
+          <span id="cal-lbl" style="font-size:13px;font-weight:500;min-width:130px;text-align:center"></span>
+          <button class="btn" onclick="calNav(1)">&#8594;</button>
+          <select id="cal-fil-owner" onchange="renderCalendar()"><option value="">Todos responsáveis</option></select>
+          <select id="cal-fil-client" onchange="renderCalendar()"><option value="">Todos clientes</option></select>
+          <select id="cal-fil-proj" onchange="renderCalendar()"><option value="">Todos projetos</option></select>
+        </div>
+      </div>
+      <div id="cal-cont"></div>
+    </div>
+
+    <!-- Notificações -->
+    <div class="page" id="page-notif">
+      <div class="ph"><div class="ptitle">Notificações</div></div>
+      <div id="notif-list"></div>
+    </div>
+
+    <!-- Clientes -->
+    <div class="page" id="page-clients">
+      <div class="ph"><div class="ptitle">Clientes</div><button class="btn btn-blue" onclick="openClientModal()">+ Novo cliente</button></div>
+      <div class="card-table">
+        <div class="tw"><table>
+          <thead><tr>
+            <th style="width:160px">Nome</th>
+            <th style="width:80px">Class.</th>
+            <th style="width:140px">Produto</th>
+            <th style="width:95px">Entrada</th>
+            <th style="width:110px">Vendedor</th>
+            <th style="width:55px"></th>
+          </tr></thead>
+          <tbody id="clients-tb"></tbody>
+        </table></div>
+        <div class="add-row" onclick="openClientModal()">+ Adicionar cliente</div>
+      </div>
+    </div>
+
+    <!-- Produtos -->
+    <div class="page" id="page-products">
+      <div class="ph"><div class="ptitle">Produtos</div><button class="btn btn-blue" onclick="openProductModal()">+ Novo produto</button></div>
+      <div class="card-table">
+        <div class="tw"><table>
+          <thead><tr>
+            <th>Nome do produto</th>
+            <th style="width:240px">Descrição</th>
+            <th style="width:80px">Status</th>
+            <th style="width:55px"></th>
+          </tr></thead>
+          <tbody id="products-tb"></tbody>
+        </table></div>
+        <div class="add-row" onclick="openProductModal()">+ Adicionar produto</div>
+      </div>
+    </div>
+
+    <!-- Responsáveis -->
+    <div class="page" id="page-owners">
+      <div class="ph"><div class="ptitle">Responsáveis</div><button class="btn btn-blue" onclick="openOwnerModal()">+ Novo responsável</button></div>
+      <div class="card-table">
+        <div class="tw"><table>
+          <thead><tr>
+            <th style="width:160px">Nome</th>
+            <th style="width:200px">E-mail</th>
+            <th style="width:80px">Status</th>
+            <th style="width:55px"></th>
+          </tr></thead>
+          <tbody id="owners-tb"></tbody>
+        </table></div>
+        <div class="add-row" onclick="openOwnerModal()">+ Adicionar responsável</div>
+      </div>
+    </div>
+
+    <!-- Vendedores -->
+    <div class="page" id="page-sellers">
+      <div class="ph"><div class="ptitle">Vendedores</div><button class="btn btn-blue" onclick="openSellerModal()">+ Novo vendedor</button></div>
+      <div class="card-table">
+        <div class="tw"><table>
+          <thead><tr>
+            <th style="width:160px">Nome</th>
+            <th style="width:200px">E-mail</th>
+            <th style="width:130px">Telefone</th>
+            <th style="width:80px">Status</th>
+            <th style="width:55px"></th>
+          </tr></thead>
+          <tbody id="sellers-tb"></tbody>
+        </table></div>
+        <div class="add-row" onclick="openSellerModal()">+ Adicionar vendedor</div>
+      </div>
+    </div>
+
+    <!-- Usuários -->
+    <div class="page" id="page-users">
+      <div class="ph"><div class="ptitle">Usuários do sistema</div><button class="btn btn-blue" id="btn-new-user" onclick="openUserModal()">+ Novo usuário</button></div>
+      <div class="card-table">
+        <div class="tw"><table>
+          <thead><tr>
+            <th style="width:160px">Nome</th>
+            <th style="width:200px">E-mail</th>
+            <th style="width:120px">Perfil</th>
+            <th style="width:130px">Responsável vinculado</th>
+            <th style="width:80px">Status</th>
+            <th style="width:55px"></th>
+          </tr></thead>
+          <tbody id="users-tb"></tbody>
+        </table></div>
+        <div class="add-row" id="add-row-user" onclick="openUserModal()">+ Adicionar usuário</div>
+      </div>
+    </div>
+
+    <div id="modal-area"></div>
+  </div>
+</div>
+
+<!-- Tela de Login -->
+<div id="login-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r-lg);padding:32px 28px;width:360px;max-width:90vw">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px">
+      <div style="width:10px;height:10px;border-radius:50%;background:#185FA5"></div>
+      <div style="font-size:18px;font-weight:600">TeamBoard</div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:20px">Entre com sua conta para acessar</div>
+    <div id="login-error" style="display:none;background:#FCEBEB;color:#A32D2D;border:0.5px solid #F09595;border-radius:var(--r-md);padding:9px 12px;font-size:12px;margin-bottom:12px"></div>
+    <div style="margin-bottom:11px">
+      <label style="display:block;font-size:10px;color:var(--text2);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">E-mail</label>
+      <input id="login-email" type="email" placeholder="seu@email.com" style="width:100%;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="display:block;font-size:10px;color:var(--text2);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Senha</label>
+      <input id="login-password" type="password" placeholder="••••••••" style="width:100%;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <button onclick="doLogin()" style="width:100%;padding:10px;background:#185FA5;color:#B5D4F4;border:none;border-radius:var(--r-md);font-size:13px;font-weight:500;cursor:pointer">Entrar</button>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>

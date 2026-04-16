@@ -1,0 +1,13 @@
+# Credenciais — NUNCA enviar ao GitHub
+.env
+
+# Dependências
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
