@@ -552,32 +552,38 @@ function openEditTask(id){
 async function submitComment(){
   if(!editingTask)return;
   const txt=$('new-cmt').value.trim();if(!txt)return;
-  const ownerId=$('f-owner').value;
   const mentionId=$('cmt-mention')?.value||'';
-  const o=ownerById(ownerId);
+
+  // Usar o usuário logado como autor do comentário
+  // Se o usuário logado tiver ownerId vinculado usa ele, senão usa o responsável da tarefa
+  const authorOwnerId = currentUser?.ownerId || $('f-owner').value;
+  const o = ownerById(authorOwnerId) || {};
+  // Nome do autor: prefere o nome do usuário logado
+  const authorName = currentUser?.name || o.name || '?';
+
   const c=await api('POST','/tasks/'+editingTask+'/comments',{
-    author:o.name||'?', authorId:ownerId, text:txt, mentionId:mentionId||null
+    author:authorName, authorId:authorOwnerId, text:txt, mentionId:mentionId||null
   });
   $('new-cmt').value='';
   if($('cmt-mention'))$('cmt-mention').value='';
   const mo=mentionId?ownerById(mentionId):null;
   $('cmt-list').insertAdjacentHTML('beforeend',`<div class="cmt-item">
-    <div class="av" style="background:${o.color||'#ddd'};color:#fff">${o.initials||'??'}</div>
+    <div class="av" style="background:${o.color||'#185FA5'};color:#fff">${o.initials||authorName.slice(0,2).toUpperCase()}</div>
     <div class="cmt-body">
-      <div class="cmt-meta">${esc(o.name||'?')} · ${esc(c.time)}
+      <div class="cmt-meta">${esc(authorName)} · ${esc(c.time)}
         ${mo?`<span style="margin-left:6px;background:#E6F1FB;color:#0C447C;padding:1px 6px;border-radius:6px;font-size:10px">@ ${esc(mo.name)}</span>`:''}
       </div>
       <div class="cmt-text">${esc(txt)}</div>
     </div>
   </div>`);
-  // Ajuste 4: disparar notificação por email para responsável mencionado
+  // Notificação por email para responsável mencionado
   if(mentionId){
     const task=tasks.find(x=>x.id===editingTask)||allCalTasks.find(x=>x.id===editingTask)||{};
     const projNome=projects.find(p=>p.id===task.projId)?.name||'';
     await api('POST','/notify',{
       type:'comment_mention',
       toOwnerId:mentionId,
-      fromName:o.name||'?',
+      fromName:authorName,
       taskName:task.name||'',
       projName:projNome,
       comment:txt
@@ -616,6 +622,23 @@ async function saveTask(){
       taskName:name,
       projName:projNome
     });
+  }
+
+  // Notificar responsável quando um link de Meet for vinculado à tarefa
+  if(newOwnerId&&meetData?.meetUrl){
+    const oldMeetUrl=oldTask?.meet?.meetUrl||'';
+    if(meetData.meetUrl!==oldMeetUrl){
+      const projNome=projects.find(p=>p.id===(body.projId||activeProj))?.name||'';
+      await api('POST','/notify',{
+        type:'meet_created',
+        toOwnerId:newOwnerId,
+        fromName:currentUser?.name||'Sistema',
+        taskName:name,
+        projName:projNome,
+        meetUrl:meetData.meetUrl,
+        meetTitle:meetData.title||name
+      });
+    }
   }
 
   tasks=await api('GET','/tasks?projId='+activeProj);

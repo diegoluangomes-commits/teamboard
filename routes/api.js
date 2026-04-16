@@ -392,7 +392,7 @@ router.delete('/templates/:id', async (req, res) => {
 
 // ── Notificações por email ─────────────────────────────────
 router.post('/notify', async (req, res) => {
-  const { type, toOwnerId, fromName, taskName, projName, comment } = req.body;
+  const { type, toOwnerId, fromName, taskName, projName, comment, meetUrl, meetTitle } = req.body;
   try {
     const { rows } = await q('SELECT * FROM owners WHERE id=$1', [toOwnerId]);
     const owner = rows[0];
@@ -405,6 +405,9 @@ router.post('/notify', async (req, res) => {
     } else if (type === 'comment_mention') {
       subject = `[TeamSolidez] Você foi mencionado em um comentário`;
       text    = `Olá ${owner.name},\n\n${fromName} mencionou você em um comentário na tarefa "${taskName}":\n\n📁 Projeto: ${projName||'—'}\n💬 "${comment}"\n\nAcesse o sistema para responder:\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
+    } else if (type === 'meet_created') {
+      subject = `[TeamSolidez] Reunião criada para a tarefa: ${taskName}`;
+      text    = `Olá ${owner.name},\n\nUma reunião Google Meet foi criada para você!\n\n📋 Tarefa: ${taskName}\n📁 Projeto: ${projName||'—'}\n📅 Reunião: ${meetTitle||taskName}\n👤 Criada por: ${fromName}\n\n🔗 Link do Meet:\n${meetUrl}\n\nAcesse o link acima para entrar na reunião.\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     }
 
     const nodemailer = require('nodemailer');
