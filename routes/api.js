@@ -392,7 +392,7 @@ router.delete('/templates/:id', async (req, res) => {
 
 // ── Notificações por email ─────────────────────────────────
 router.post('/notify', async (req, res) => {
-  const { type, toOwnerId, fromName, taskName, comment } = req.body;
+  const { type, toOwnerId, fromName, taskName, projName, comment } = req.body;
   try {
     const { rows } = await q('SELECT * FROM owners WHERE id=$1', [toOwnerId]);
     const owner = rows[0];
@@ -401,10 +401,10 @@ router.post('/notify', async (req, res) => {
     let subject = '', text = '';
     if (type === 'task_assigned') {
       subject = `[TeamSolidez] Nova tarefa atribuída a você: ${taskName}`;
-      text    = `Olá ${owner.name},\n\nVocê recebeu uma nova tarefa no TeamSolidez!\n\n📋 Tarefa: ${taskName}\n👤 Atribuída por: ${fromName}\n\nAcesse o sistema para ver todos os detalhes, período e status da tarefa:\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
+      text    = `Olá ${owner.name},\n\nVocê recebeu uma nova tarefa no TeamSolidez!\n\n📋 Tarefa: ${taskName}\n📁 Projeto: ${projName||'—'}\n👤 Atribuída por: ${fromName}\n\nAcesse o sistema para ver todos os detalhes, período e status da tarefa:\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     } else if (type === 'comment_mention') {
       subject = `[TeamSolidez] Você foi mencionado em um comentário`;
-      text    = `Olá ${owner.name},\n\n${fromName} mencionou você em um comentário na tarefa "${taskName}":\n\n💬 "${comment}"\n\nAcesse o sistema para responder:\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
+      text    = `Olá ${owner.name},\n\n${fromName} mencionou você em um comentário na tarefa "${taskName}":\n\n📁 Projeto: ${projName||'—'}\n💬 "${comment}"\n\nAcesse o sistema para responder:\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     }
 
     const nodemailer = require('nodemailer');

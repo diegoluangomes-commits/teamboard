@@ -572,12 +572,14 @@ async function submitComment(){
   </div>`);
   // Ajuste 4: disparar notificação por email para responsável mencionado
   if(mentionId){
-    const task=tasks.find(x=>x.id===editingTask)||{};
+    const task=tasks.find(x=>x.id===editingTask)||allCalTasks.find(x=>x.id===editingTask)||{};
+    const projNome=projects.find(p=>p.id===task.projId)?.name||'';
     await api('POST','/notify',{
       type:'comment_mention',
       toOwnerId:mentionId,
       fromName:o.name||'?',
       taskName:task.name||'',
+      projName:projNome,
       comment:txt
     });
   }
@@ -606,11 +608,13 @@ async function saveTask(){
 
   // Ajuste 4: notificar responsável quando for nova tarefa ou quando trocar o responsável
   if(newOwnerId&&(isNew||ownerChanged)){
+    const projNome=projects.find(p=>p.id===(body.projId||activeProj))?.name||'';
     await api('POST','/notify',{
       type:'task_assigned',
       toOwnerId:newOwnerId,
       fromName:currentUser?.name||'Sistema',
-      taskName:name
+      taskName:name,
+      projName:projNome
     });
   }
 
