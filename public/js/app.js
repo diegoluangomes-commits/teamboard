@@ -640,24 +640,8 @@ async function saveTask(){
     });
   }
 
-  // Notificar responsável quando um link de Meet for vinculado à tarefa
-  if(newOwnerId && meetData?.meetUrl){
-    const oldMeetUrl = oldTask?.meet?.meetUrl || '';
-    // Dispara sempre que o link for novo ou diferente do anterior
-    if(meetData.meetUrl !== oldMeetUrl){
-      const projNome = projects.find(p=>p.id===(body.projId||activeProj))?.name||'';
-      await api('POST','/notify',{
-        type:      'meet_created',
-        toOwnerId: newOwnerId,
-        fromName:  currentUser?.name||'Sistema',
-        taskName:  name,
-        projName:  projNome,
-        meetUrl:   meetData.meetUrl,
-        meetTitle: meetData.title||name
-      });
-      showToast('E-mail com link do Meet enviado ao responsável!','success');
-    }
-  }
+  // Link do Meet já incluído no e-mail de task_assigned — não dispara e-mail separado
+  // if(newOwnerId && meetData?.meetUrl){ ... }
 
   tasks=await api('GET','/tasks?projId='+activeProj);
   closeModal();renderBoard();
