@@ -635,7 +635,8 @@ async function saveTask(){
       toOwnerId:newOwnerId,
       fromName:currentUser?.name||'Sistema',
       taskName:name,
-      projName:projNome
+      projName:projNome,
+      meetUrl:meetData?.meetUrl||''
     });
   }
 
