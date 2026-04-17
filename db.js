@@ -89,7 +89,15 @@ async function initDB() {
       created_at TIMESTAMP DEFAULT NOW()
     );
 
-    CREATE TABLE IF NOT EXISTS templates (
+    CREATE TABLE IF NOT EXISTS ausencias (
+      id          TEXT PRIMARY KEY,
+      owner_id    TEXT NOT NULL,
+      tipo        TEXT NOT NULL DEFAULT 'ferias',
+      date_start  TEXT NOT NULL,
+      date_end    TEXT NOT NULL,
+      obs         TEXT,
+      created_at  TIMESTAMP DEFAULT NOW()
+    );
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
       descr      TEXT,

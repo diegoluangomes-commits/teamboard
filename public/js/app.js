@@ -30,6 +30,7 @@ let owners     = [];
 let sellers    = [];
 let templates  = [];
 let users      = [];
+let ausencias  = [];
 let activeProj = null;
 let editingTask = null, editingClient = null, editingProj = null;
 let editingProduct = null, editingOwner = null, editingSeller = null, editingTemplate = null, editingUser = null;
@@ -183,7 +184,10 @@ function applyPerfilRestrictions(){
   const niUsers=$('ni-users');if(niUsers)niUsers.style.display=isAdmin?'flex':'none';
   const btnNU=$('btn-new-user');if(btnNU)btnNU.style.display=isAdmin?'':'none';
   const arU=$('add-row-user');if(arU)arU.style.display=isAdmin?'':'none';
-  // Adiciona classe global para esconder botões de exclusão via CSS
+  // Ausências — apenas admin pode cadastrar
+  const btnNA=$('btn-new-ausencia');if(btnNA)btnNA.style.display=isAdmin?'':'none';
+  const arA=$('add-row-ausencia');if(arA)arA.style.display=isAdmin?'':'none';
+  const infoA=$('ausencia-info');if(infoA)infoA.style.display=isAdmin?'none':'block';
   document.body.classList.toggle('perfil-responsavel', !isAdmin);
 }
 
@@ -204,10 +208,10 @@ async function doLogout(){
 
 // ── Load ───────────────────────────────────────────────────
 async function loadAll() {
-  [projects, clients, products, owners, sellers, templates, users] = await Promise.all([
+  [projects, clients, products, owners, sellers, templates, users, ausencias] = await Promise.all([
     api('GET','/projects'), api('GET','/clients'), api('GET','/products'),
     api('GET','/owners'),   api('GET','/sellers'), api('GET','/templates'),
-    api('GET','/users')
+    api('GET','/users'),    api('GET','/ausencias')
   ]);
   if (projects.length) {
     activeProj = activeProj || projects[0].id;
@@ -223,7 +227,7 @@ async function loadAll() {
 function renderAll() {
   renderProjNav(); renderProjGrid(); renderBoard();
   renderClientsTable(); renderProductsTable(); renderOwnersTable();
-  renderSellersTable(); renderTemplates(); renderNotifs(); renderUsersTable(); updateSelects();
+  renderSellersTable(); renderTemplates(); renderNotifs(); renderUsersTable(); renderAusenciasTable(); updateSelects();
 }
 
 // ── Selects dinâmicos ──────────────────────────────────────
@@ -674,6 +678,16 @@ async function saveTask(){
   const oldTask=editingTask?tasks.find(x=>x.id===editingTask):null;
   const isNew=!editingTask;
   const ownerChanged=oldTask&&oldTask.ownerId!==newOwnerId;
+
+  // Verifica se responsável está ausente no período da tarefa
+  if(newOwnerId&&(dateStart||date)){
+    const aus=checkAusencia(newOwnerId,dateStart||date,dateEnd||date);
+    if(aus){
+      const tipo=AUSENCIA_TIPOS[aus.tipo]||AUSENCIA_TIPOS.ferias;
+      const o=ownerById(newOwnerId);
+      showToast(`⚠️ ${o.name||'Responsável'} está em ${tipo.l} de ${fd(aus.dateStart)} a ${fd(aus.dateEnd)}!`,'error');
+    }
+  }
 
   if(editingTask){await api('PUT','/tasks/'+editingTask,body);}
   else{await api('POST','/tasks',body);}
@@ -1313,6 +1327,21 @@ function renderCalendar(){
         <span style="font-size:9px;font-weight:700;flex-shrink:0;color:${ownerColor}">${o.initials||''}</span>
       </div>`;
     });
+
+    // Mostrar ausências do dia no calendário
+    const dayAus=ausencias.filter(a=>a.dateStart<=ds&&a.dateEnd>=ds);
+    dayAus.forEach(a=>{
+      const o=ownerById(a.ownerId);
+      const tipo=AUSENCIA_TIPOS[a.tipo]||AUSENCIA_TIPOS.ferias;
+      const isFirst=a.dateStart===ds;
+      html+=`<div title="${esc(o.name||'')} · ${tipo.l}"
+        style="font-size:10px;padding:2px 5px;border-radius:4px;margin-bottom:2px;
+               background:${tipo.bg};color:${tipo.color};border-left:3px solid ${tipo.color};
+               display:flex;align-items:center;gap:3px;overflow:hidden;opacity:.85">
+        <span style="font-size:9px;flex-shrink:0">${tipo.icon}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px">${isFirst?esc(o.name||''):''}</span>
+      </div>`;
+    });
     c.innerHTML=html;
     grid.appendChild(c);
   }
@@ -1557,7 +1586,106 @@ async function deleteUser(id){
   users=users.filter(u=>u.id!==id);renderUsersTable();
 }
 
-// ── Navigation ─────────────────────────────────────────────
+// ── Ausências ───────────────────────────────────────────────
+const AUSENCIA_TIPOS = {
+  ferias:      { l: 'Férias',       icon: '🏖️', color: '#185FA5', bg: '#E6F1FB' },
+  folga:       { l: 'Folga',        icon: '😴', color: '#3B6D11', bg: '#EAF3DE' },
+  afastamento: { l: 'Afastamento',  icon: '🏥', color: '#993556', bg: '#FBEAF0' },
+  evento:      { l: 'Evento',       icon: '📅', color: '#BA7517', bg: '#FAEEDA' }
+};
+
+let editingAusencia=null;
+
+function renderAusenciasTable(){
+  const tb=$('ausencias-tb');if(!tb)return;
+  const isAdmin=currentUser?.perfil==='admin';
+  const sorted=ausencias.slice().sort((a,b)=>a.dateStart.localeCompare(b.dateStart));
+  tb.innerHTML=sorted.map(a=>{
+    const o=ownerById(a.ownerId);
+    const tipo=AUSENCIA_TIPOS[a.tipo]||AUSENCIA_TIPOS.ferias;
+    const dias=calcDias(a.dateStart,a.dateEnd);
+    return `<tr style="cursor:${isAdmin?'pointer':'default'}" ${isAdmin?`onclick="editAusencia('${a.id}')"`:''}">
+      <td><div style="display:flex;align-items:center;gap:6px">${ownerAvatar(o)}<span>${esc(o.name||'—')}</span></div></td>
+      <td><span style="font-size:11px;padding:2px 8px;border-radius:8px;font-weight:500;background:${tipo.bg};color:${tipo.color}">${tipo.icon} ${tipo.l}</span></td>
+      <td class="dc">${fd(a.dateStart)}</td>
+      <td class="dc">${fd(a.dateEnd)}</td>
+      <td style="text-align:center;font-weight:500">${dias}</td>
+      <td style="color:var(--text2);font-size:12px">${esc(a.obs||'')}</td>
+      <td><button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteAusencia('${a.id}')">×</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Nenhuma ausência cadastrada</td></tr>';
+}
+
+function calcDias(start,end){
+  if(!start||!end)return '—';
+  const d1=new Date(start),d2=new Date(end);
+  return Math.round((d2-d1)/86400000)+1+'d';
+}
+
+function ausenciaHTML(a){
+  return `<div class="modal" style="max-width:440px">
+    <h3>${a?'Editar ausência':'Nova ausência'}</h3>
+    <div class="f2">
+      <div class="fr" style="flex:2"><label>Responsável</label>
+        <select id="aus-owner">
+          <option value="">— selecione —</option>
+          ${owners.filter(o=>o.active).map(o=>`<option value="${o.id}"${a?.ownerId===o.id?' selected':''}>${esc(o.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fr"><label>Tipo</label>
+        <select id="aus-tipo">
+          ${Object.entries(AUSENCIA_TIPOS).map(([k,v])=>`<option value="${k}"${(a?.tipo||'ferias')===k?' selected':''}>${v.icon} ${v.l}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="f2">
+      <div class="fr"><label>Data início</label><input type="date" id="aus-start" value="${a?.dateStart||''}"/></div>
+      <div class="fr"><label>Data fim</label><input type="date" id="aus-end" value="${a?.dateEnd||''}"/></div>
+    </div>
+    <div class="fr"><label>Observação (opcional)</label><textarea id="aus-obs" placeholder="Ex: Férias programadas, afastamento médico...">${esc(a?.obs||'')}</textarea></div>
+    <div class="ma"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveAusencia()">Salvar</button></div>
+  </div>`;
+}
+
+function openAusenciaModal(){
+  if(currentUser?.perfil!=='admin'){showToast('Apenas Administradores podem cadastrar ausências.','error');return;}
+  editingAusencia=null;showModal(ausenciaHTML(null));
+}
+function editAusencia(id){
+  if(currentUser?.perfil!=='admin'){showToast('Apenas Administradores podem editar ausências.','error');return;}
+  const a=ausencias.find(x=>x.id===id);if(!a)return;
+  editingAusencia=id;showModal(ausenciaHTML(a));
+}
+async function saveAusencia(){
+  const ownerId=$('aus-owner').value;
+  const dateStart=$('aus-start').value;
+  const dateEnd=$('aus-end').value;
+  if(!ownerId)return showToast('Selecione um responsável.','error');
+  if(!dateStart||!dateEnd)return showToast('Informe o período.','error');
+  if(dateEnd<dateStart)return showToast('A data fim deve ser maior ou igual à data início.','error');
+  const body={ownerId,tipo:$('aus-tipo').value,dateStart,dateEnd,obs:$('aus-obs').value};
+  if(editingAusencia){await api('PUT','/ausencias/'+editingAusencia,body);}
+  else{await api('POST','/ausencias',body);}
+  ausencias=await api('GET','/ausencias');
+  closeModal();renderAusenciasTable();
+  showToast(editingAusencia?'Ausência atualizada!':'Ausência cadastrada!','success');
+}
+async function deleteAusencia(id){
+  if(!canDelete())return;
+  if(!confirm('Excluir ausência?'))return;
+  await api('DELETE','/ausencias/'+id);
+  ausencias=ausencias.filter(a=>a.id!==id);renderAusenciasTable();
+}
+
+// Verifica se responsável está ausente em um período
+function checkAusencia(ownerId, dateStart, dateEnd){
+  if(!ownerId||!dateStart)return null;
+  const end=dateEnd||dateStart;
+  return ausencias.find(a=>
+    a.ownerId===ownerId &&
+    a.dateStart<=end && a.dateEnd>=dateStart
+  );
+}
 function goPage(p){
   closeModal(); // Ajuste 4: fecha qualquer modal aberto ao navegar
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
@@ -1570,6 +1698,7 @@ function goPage(p){
   if(p==='sellers')  renderSellersTable();
   if(p==='templates')renderTemplates();
   if(p==='users')    renderUsersTable();
+  if(p==='ausencias')renderAusenciasTable();
   if(p==='projects') renderProjGrid();
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
 }

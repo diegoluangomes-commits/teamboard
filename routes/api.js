@@ -443,4 +443,35 @@ router.post('/notify', async (req, res) => {
   }
 });
 
+// ── Ausências ──────────────────────────────────────────────
+router.get('/ausencias', async (req, res) => {
+  const { rows } = await q('SELECT * FROM ausencias ORDER BY date_start');
+  send(res, rows.map(r=>({ id:r.id, ownerId:r.owner_id, tipo:r.tipo, dateStart:r.date_start, dateEnd:r.date_end, obs:r.obs||'' })));
+});
+
+router.post('/ausencias', async (req, res) => {
+  const { ownerId, tipo, dateStart, dateEnd, obs } = req.body;
+  const id = uuidv4();
+  const { rows } = await q(
+    'INSERT INTO ausencias (id,owner_id,tipo,date_start,date_end,obs) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+    [id, ownerId, tipo||'ferias', dateStart, dateEnd, obs||'']
+  );
+  send(res, { id:rows[0].id, ownerId:rows[0].owner_id, tipo:rows[0].tipo, dateStart:rows[0].date_start, dateEnd:rows[0].date_end, obs:rows[0].obs||'' });
+});
+
+router.put('/ausencias/:id', async (req, res) => {
+  const { ownerId, tipo, dateStart, dateEnd, obs } = req.body;
+  const { rows } = await q(
+    'UPDATE ausencias SET owner_id=$1,tipo=$2,date_start=$3,date_end=$4,obs=$5 WHERE id=$6 RETURNING *',
+    [ownerId, tipo||'ferias', dateStart, dateEnd, obs||'', req.params.id]
+  );
+  if(!rows.length) return notFound(res,'Ausência');
+  send(res, { id:rows[0].id, ownerId:rows[0].owner_id, tipo:rows[0].tipo, dateStart:rows[0].date_start, dateEnd:rows[0].date_end, obs:rows[0].obs||'' });
+});
+
+router.delete('/ausencias/:id', async (req, res) => {
+  await q('DELETE FROM ausencias WHERE id=$1', [req.params.id]);
+  send(res, { ok: true });
+});
+
 module.exports = router;
