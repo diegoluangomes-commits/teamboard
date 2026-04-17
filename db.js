@@ -17,6 +17,8 @@ async function initDB() {
       product_id  TEXT,
       seller_id   TEXT,
       owner_id    TEXT,
+      date_start  TEXT,
+      date_end    TEXT,
       created_at  TIMESTAMP DEFAULT NOW()
     );
 
@@ -159,6 +161,12 @@ async function initDB() {
 
     console.log('[DB] Dados iniciais inseridos com sucesso.');
   }
+
+  // ── Migration: adicionar colunas novas se não existirem ──
+  await pool.query(`
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS date_start TEXT;
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS date_end   TEXT;
+  `).catch(()=>{});
 
   console.log('[DB] PostgreSQL conectado e tabelas prontas.');
 }

@@ -3,7 +3,8 @@ const GROUPS = [
   { name: 'Onboarding',         color: '#185FA5', bg: '#E6F1FB', text: '#0C447C' },
   { name: 'Preparação de base', color: '#3B6D11', bg: '#EAF3DE', text: '#27500A' },
   { name: 'Treinamento',        color: '#BA7517', bg: '#FAEEDA', text: '#633806' },
-  { name: 'Acompanhamento',     color: '#993556', bg: '#FBEAF0', text: '#72243E' }
+  { name: 'Acompanhamento',     color: '#993556', bg: '#FBEAF0', text: '#72243E' },
+  { name: 'Administrativo',     color: '#534AB7', bg: '#EEEDFE', text: '#3C3489' }
 ];
 
 const SM = {
@@ -231,7 +232,15 @@ function renderProjNav() {
 function renderProjGrid() {
   const el=$('proj-grid'); if(!el)return;
   const search=($('proj-search')?.value||'').toLowerCase();
-  const filtered=projects.filter(p=>!search||p.name.toLowerCase().includes(search));
+  // Ajuste 7: ordenar por data início
+  const filtered=projects
+    .filter(p=>!search||p.name.toLowerCase().includes(search))
+    .slice().sort((a,b)=>{
+      if(!a.dateStart&&!b.dateStart)return 0;
+      if(!a.dateStart)return 1;
+      if(!b.dateStart)return -1;
+      return a.dateStart.localeCompare(b.dateStart);
+    });
   el.innerHTML = filtered.map(p => {
     const pt = tasks.filter(t=>t.projId===p.id);
     const dn = pt.filter(t=>t.status==='done').length;
@@ -239,17 +248,19 @@ function renderProjGrid() {
     const pct = applicable ? Math.round(dn/applicable*100) : 0;
     const cli = clientById(p.clientId);
     const prod= productById(p.productId);
-    // Ajuste 2: ícone de descrição ao lado do progresso
     const hasDesc=p.desc&&p.desc.trim().length>0;
     return `<div class="proj-card${p.id===activeProj?' active-proj':''}" onclick="setProj('${p.id}');goPage('board')">
-      <div style="width:10px;height:10px;border-radius:3px;background:${p.color};margin-bottom:9px"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px">
+        <div style="width:10px;height:10px;border-radius:3px;background:${p.color};flex-shrink:0"></div>
+        ${p.dateStart?`<span style="font-size:10px;color:var(--text3)">📅 ${fd(p.dateStart)}</span>`:''}
+      </div>
       <div style="font-size:13px;font-weight:500;margin-bottom:3px">${esc(p.name)}</div>
       ${cli.name?`<div style="font-size:11px;color:var(--text2);margin-bottom:1px">${esc(cli.name)}</div>`:''}
       ${prod.name?`<div style="font-size:10px;color:var(--text3)">${esc(prod.name)}</div>`:''}
       <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
         <div style="font-size:11px;color:var(--text2);flex:1">${pt.length} tarefas · ${pct}% concluído</div>
         ${hasDesc?`<button onclick="event.stopPropagation();showProjDesc('${p.id}')" title="Ver descrição"
-          style="background:none;border:none;cursor:pointer;padding:2px;color:var(--text3);display:flex;align-items:center" >
+          style="background:none;border:none;cursor:pointer;padding:2px;color:var(--text3);display:flex;align-items:center">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3">
             <circle cx="7" cy="7" r="5.5"/>
             <line x1="7" y1="6" x2="7" y2="10"/>
@@ -517,10 +528,12 @@ function taskHTML(t) {
         const ao=ownerById(c.authorId);
         const mo=c.mentionId?ownerById(c.mentionId):null;
         return `<div class="cmt-item">
-          <div class="av" style="background:${ao.color||'#ddd'};color:#fff">${ao.initials||'??'}</div>
           <div class="cmt-body">
-            <div class="cmt-meta">${esc(ao.name||c.author||'?')} · ${esc(c.time)}
-              ${mo?`<span style="margin-left:6px;background:#E6F1FB;color:#0C447C;padding:1px 6px;border-radius:6px;font-size:10px">@ ${esc(mo.name)}</span>`:''}
+            <div class="cmt-meta" style="display:flex;align-items:center;gap:6px">
+              <span style="font-weight:500;color:var(--text)">${esc(c.author||ao.name||'?')}</span>
+              <span style="color:var(--text3)">·</span>
+              <span style="color:var(--text3)">${esc(c.time)}</span>
+              ${mo?`<span style="background:#E6F1FB;color:#0C447C;padding:1px 6px;border-radius:6px;font-size:10px">@ ${esc(mo.name)}</span>`:''}
             </div>
             <div class="cmt-text">${esc(c.text)}</div>
           </div>
@@ -568,10 +581,12 @@ async function submitComment(){
   if($('cmt-mention'))$('cmt-mention').value='';
   const mo=mentionId?ownerById(mentionId):null;
   $('cmt-list').insertAdjacentHTML('beforeend',`<div class="cmt-item">
-    <div class="av" style="background:${o.color||'#185FA5'};color:#fff">${o.initials||authorName.slice(0,2).toUpperCase()}</div>
     <div class="cmt-body">
-      <div class="cmt-meta">${esc(authorName)} · ${esc(c.time)}
-        ${mo?`<span style="margin-left:6px;background:#E6F1FB;color:#0C447C;padding:1px 6px;border-radius:6px;font-size:10px">@ ${esc(mo.name)}</span>`:''}
+      <div class="cmt-meta" style="display:flex;align-items:center;gap:6px">
+        <span style="font-weight:500;color:var(--text)">${esc(authorName)}</span>
+        <span style="color:var(--text3)">·</span>
+        <span style="color:var(--text3)">${esc(c.time)}</span>
+        ${mo?`<span style="background:#E6F1FB;color:#0C447C;padding:1px 6px;border-radius:6px;font-size:10px">@ ${esc(mo.name)}</span>`:''}
       </div>
       <div class="cmt-text">${esc(txt)}</div>
     </div>
@@ -655,7 +670,7 @@ function highlightTurno(){
 }
 
 async function createMeetFromTask(){
-  const title=$('meet-title').value.trim()||$('f-name').value.trim()||'Reunião TeamBoard';
+  const title=$('meet-title').value.trim()||$('f-name').value.trim()||'Reunião TeamSolidez';
   const date=$('meet-date').value,dur=+$('meet-dur').value,parts=$('meet-parts').value;
   const btn=document.querySelector('#meet-create-area .btn-blue');
   if(btn)btn.style.display='none';
@@ -722,6 +737,10 @@ function projHTML(p) {
       <div class="fr"><label>Vendedor</label><select id="p-seller"><option value="">— nenhum —</option>${sellers.map(s=>`<option value="${s.id}"${p?.sellerId===s.id?' selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
     </div>
     <div class="fr"><label>Responsável principal</label><select id="p-owner"><option value="">— nenhum —</option>${owners.map(o=>`<option value="${o.id}"${p?.ownerId===o.id?' selected':''}>${esc(o.name)}</option>`).join('')}</select></div>
+    <div class="f2">
+      <div class="fr"><label>Data início</label><input type="date" id="p-date-start" value="${p?.dateStart||''}"/></div>
+      <div class="fr"><label>Previsão de conclusão</label><input type="date" id="p-date-end" value="${p?.dateEnd||''}"/></div>
+    </div>
     <div class="fr"><label>Descrição</label><textarea id="p-desc">${esc(p?.desc||'')}</textarea></div>
     ${!p&&templates.length?`
     <div class="section-sep"></div>
@@ -740,7 +759,8 @@ async function saveProj(){
   const name=$('p-name').value.trim();if(!name)return;
   const body={name,color:$('p-color').value,clientId:$('p-client')?.value||null,
     productId:$('p-product')?.value||null,sellerId:$('p-seller')?.value||null,
-    ownerId:$('p-owner')?.value||null,desc:$('p-desc')?.value||''};
+    ownerId:$('p-owner')?.value||null,desc:$('p-desc')?.value||'',
+    dateStart:$('p-date-start')?.value||'',dateEnd:$('p-date-end')?.value||''};
   const tplId=$('p-template')?.value||'';
   if(editingProj){
     await api('PUT','/projects/'+editingProj,body);
@@ -907,9 +927,24 @@ async function deleteTemplate(id){
 }
 
 // ── Clients ────────────────────────────────────────────────
+let clientSort={col:'name',dir:1};
+function sortClients(col){
+  if(clientSort.col===col){clientSort.dir*=-1;}else{clientSort.col=col;clientSort.dir=1;}
+  renderClientsTable();
+}
+
 function renderClientsTable(){
   const tb=$('clients-tb');if(!tb)return;
-  tb.innerHTML=clients.map(c=>`<tr onclick="editClient('${c.id}')" style="cursor:pointer">
+  const sorted=clients.slice().sort((a,b)=>{
+    let va='',vb='';
+    if(clientSort.col==='name'){va=a.name||'';vb=b.name||'';}
+    else if(clientSort.col==='classification'){va=a.classification||'';vb=b.classification||'';}
+    else if(clientSort.col==='product'){va=productById(a.productId)?.name||'';vb=productById(b.productId)?.name||'';}
+    else if(clientSort.col==='date'){va=a.date||'';vb=b.date||'';}
+    else if(clientSort.col==='seller'){va=sellerById(a.sellerId)?.name||'';vb=sellerById(b.sellerId)?.name||'';}
+    return va.localeCompare(vb)*clientSort.dir;
+  });
+  tb.innerHTML=sorted.map(c=>`<tr onclick="editClient('${c.id}')" style="cursor:pointer">
     <td>${esc(c.name)}</td>
     <td><span class="pill class-${c.classification}">${c.classification}</span></td>
     <td>${esc(productById(c.productId)?.name||'—')}</td>
@@ -1101,6 +1136,40 @@ function renderNotifs(){
 // ── Calendário ─────────────────────────────────────────────
 let calY=new Date().getFullYear(), calM=new Date().getMonth();
 
+// Feriados nacionais fixos (MM-DD) e móveis calculados por ano
+function getFeriados(year){
+  // Cálculo da Páscoa (algoritmo de Gauss)
+  const a=year%19, b=Math.floor(year/100), c=year%100;
+  const d=Math.floor(b/4), e=b%4, f=Math.floor((b+8)/25);
+  const g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7;
+  const m=Math.floor((a+11*h+22*l)/451);
+  const month=Math.floor((h+l-7*m+114)/31);
+  const day=((h+l-7*m+114)%31)+1;
+  const pascoa=new Date(year,month-1,day);
+  const add=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r.toISOString().slice(0,10);};
+  const fmt=d=>`${year}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+  return {
+    // Fixos
+    [`${year}-01-01`]:'Confraternização Universal',
+    [`${year}-04-21`]:'Tiradentes',
+    [`${year}-05-01`]:'Dia do Trabalho',
+    [`${year}-09-07`]:'Independência do Brasil',
+    [`${year}-10-12`]:'Nossa Sra. Aparecida',
+    [`${year}-11-02`]:'Finados',
+    [`${year}-11-15`]:'Proclamação da República',
+    [`${year}-11-20`]:'Consciência Negra',
+    [`${year}-12-25`]:'Natal',
+    // Móveis baseados na Páscoa
+    [add(pascoa,-48)]:'Segunda de Carnaval',
+    [add(pascoa,-47)]:'Terça de Carnaval',
+    [add(pascoa,-2)] :'Sexta-feira Santa',
+    [fmt(pascoa)]    :'Páscoa',
+    [add(pascoa,60)] :'Corpus Christi',
+  };
+}
+
 let allCalTasks=[];
 async function loadAllTasksForCal(){
   allCalTasks=await api('GET','/tasks');
@@ -1157,28 +1226,35 @@ function renderCalendar(){
   }
 
   // Dias do mês
+  const feriados=getFeriados(calY);
   for(let d=1;d<=dim;d++){
     const ds=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const isToday=ds===today;
+    const isFeriado=!!feriados[ds];
+    const feriadoNome=feriados[ds]||'';
     const dayTasks=ft.filter(t=>taskOnDay(t,ds));
     const hasTask=dayTasks.length>0;
     const dayStr=String(d).padStart(2,'0');
     const c=document.createElement('div');
-    c.style.cssText=`background:${isToday?'var(--blue-bg)':'var(--surface)'};padding:5px 7px;min-height:90px;cursor:pointer;transition:outline .1s`;
-    // Ajuste 2: clicar na célula do dia seleciona o dia na lista abaixo
+    // Fundo diferente para feriados
+    const bgCell=isToday?'var(--blue-bg)':isFeriado?'#FFF8F0':'var(--surface)';
+    c.style.cssText=`background:${bgCell};padding:5px 7px;min-height:90px;cursor:pointer;transition:outline .1s`;
     c.setAttribute('id','cal-cell-'+dayStr);
     c.onclick=(e)=>{
       if(e.target.closest('[onclick*="openEditTask"]'))return;
       calSelectedDay===dayStr?calSelectDay(null):calSelectDay(dayStr);
     };
 
-    let html=`<div style="display:inline-flex;align-items:center;justify-content:center;
-      width:20px;height:20px;border-radius:50%;margin-bottom:3px;font-size:11px;
-      font-weight:${isToday?'700':'400'};cursor:pointer;
-      background:${isToday?'#185FA5':'transparent'};
-      color:${isToday?'#fff':hasTask?'var(--text)':'var(--text2)'};
-      ${hasTask&&!isToday?'font-weight:600':''}
-      ">${d}</div>`;
+    let html=`<div style="display:flex;align-items:center;gap:3px;margin-bottom:3px">
+      <div style="display:inline-flex;align-items:center;justify-content:center;
+        width:20px;height:20px;border-radius:50%;font-size:11px;
+        font-weight:${isToday?'700':'400'};cursor:pointer;flex-shrink:0;
+        background:${isToday?'#185FA5':isFeriado?'#EF9F27':'transparent'};
+        color:${isToday?'#fff':isFeriado?'#fff':hasTask?'var(--text)':'var(--text2)'};
+        ${hasTask&&!isToday&&!isFeriado?'font-weight:600':''}
+        ">${d}</div>
+      ${isFeriado?`<span style="font-size:9px;color:#854F0B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${esc(feriadoNome)}">${esc(feriadoNome)}</span>`:''}
+    </div>`;
 
     dayTasks.forEach(t=>{
       const o=ownerById(t.ownerId);

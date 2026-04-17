@@ -3,15 +3,23 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>TeamBoard</title>
+<title>TeamSolidez</title>
 <link rel="stylesheet" href="/css/style.css"/>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="logo" onclick="goPage('projects')">
-    <div class="logo-dot"></div>
-    TeamBoard
+  <div class="logo" onclick="goPage('projects')" style="display:flex;align-items:center;gap:8px">
+    <div id="solidez-logo" style="display:flex;align-items:center;gap:6px">
+      <!-- Substitua pela tag <img> com a logo real quando tiver o arquivo -->
+      <div style="width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,#185FA5,#3B6D11);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <span style="color:#fff;font-size:13px;font-weight:700">S</span>
+      </div>
+      <div style="display:flex;flex-direction:column;line-height:1.1">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">TeamSolidez</span>
+        <span style="font-size:9px;color:var(--text3);letter-spacing:.04em">Solidez Soluções</span>
+      </div>
+    </div>
     <span id="breadcrumb" class="breadcrumb">/ Projetos</span>
   </div>
   <div class="top-right">
@@ -187,11 +195,11 @@
       <div class="card-table">
         <div class="tw"><table>
           <thead><tr>
-            <th style="width:160px">Nome</th>
-            <th style="width:80px">Class.</th>
-            <th style="width:140px">Produto</th>
-            <th style="width:95px">Entrada</th>
-            <th style="width:110px">Vendedor</th>
+            <th style="width:160px;cursor:pointer" onclick="sortClients('name')">Nome ↕</th>
+            <th style="width:90px;cursor:pointer" onclick="sortClients('classification')">Class. ↕</th>
+            <th style="width:140px;cursor:pointer" onclick="sortClients('product')">Produto ↕</th>
+            <th style="width:95px;cursor:pointer" onclick="sortClients('date')">Entrada ↕</th>
+            <th style="width:110px;cursor:pointer" onclick="sortClients('seller')">Vendedor ↕</th>
             <th style="width:55px"></th>
           </tr></thead>
           <tbody id="clients-tb"></tbody>
@@ -280,7 +288,7 @@
   <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r-lg);padding:32px 28px;width:360px;max-width:90vw">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px">
       <div style="width:10px;height:10px;border-radius:50%;background:#185FA5"></div>
-      <div style="font-size:18px;font-weight:600">TeamBoard</div>
+      <div style="font-size:18px;font-weight:600">TeamSolidez</div>
     </div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:20px">Entre com sua conta para acessar</div>
     <div id="login-error" style="display:none;background:#FCEBEB;color:#A32D2D;border:0.5px solid #F09595;border-radius:var(--r-md);padding:9px 12px;font-size:12px;margin-bottom:12px"></div>

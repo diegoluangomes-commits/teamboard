@@ -11,7 +11,8 @@ const q        = (sql, p)   => pool.query(sql, p);
 const toProject = r => r ? ({
   id: r.id, name: r.name, color: r.color, desc: r.descr,
   clientId: r.client_id, productId: r.product_id,
-  sellerId: r.seller_id, ownerId: r.owner_id
+  sellerId: r.seller_id, ownerId: r.owner_id,
+  dateStart: r.date_start||'', dateEnd: r.date_end||''
 }) : null;
 
 const toTask = r => r ? ({
@@ -129,20 +130,20 @@ router.get('/projects', async (req, res) => {
 });
 
 router.post('/projects', async (req, res) => {
-  const { name, color, desc, clientId, productId, sellerId, ownerId } = req.body;
+  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd } = req.body;
   const id = uuidv4();
   const { rows } = await q(
-    'INSERT INTO projects (id,name,color,descr,client_id,product_id,seller_id,owner_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-    [id, name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null]
+    'INSERT INTO projects (id,name,color,descr,client_id,product_id,seller_id,owner_id,date_start,date_end) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
+    [id, name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null]
   );
   send(res, toProject(rows[0]));
 });
 
 router.put('/projects/:id', async (req, res) => {
-  const { name, color, desc, clientId, productId, sellerId, ownerId } = req.body;
+  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd } = req.body;
   const { rows } = await q(
-    'UPDATE projects SET name=$1,color=$2,descr=$3,client_id=$4,product_id=$5,seller_id=$6,owner_id=$7 WHERE id=$8 RETURNING *',
-    [name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, req.params.id]
+    'UPDATE projects SET name=$1,color=$2,descr=$3,client_id=$4,product_id=$5,seller_id=$6,owner_id=$7,date_start=$8,date_end=$9 WHERE id=$10 RETURNING *',
+    [name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null, req.params.id]
   );
   if (!rows.length) return notFound(res,'Projeto');
   send(res, toProject(rows[0]));
@@ -218,7 +219,7 @@ router.post('/tasks/:id/comments', async (req, res) => {
   const { rows } = await q('SELECT comments FROM tasks WHERE id=$1', [req.params.id]);
   if (!rows.length) return notFound(res,'Tarefa');
   const comments = rows[0].comments || [];
-  const c = { id: uuidv4(), ...req.body, time: new Date().toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short' }) };
+  const c = { id: uuidv4(), ...req.body, time: new Date().toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short', timeZone:'America/Sao_Paulo' }) };
   comments.push(c);
   await q('UPDATE tasks SET comments=$1 WHERE id=$2', [JSON.stringify(comments), req.params.id]);
   send(res, c);
