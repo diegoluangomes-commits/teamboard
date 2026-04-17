@@ -98,6 +98,8 @@ async function initDB() {
       obs         TEXT,
       created_at  TIMESTAMP DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS templates (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
       descr      TEXT,
