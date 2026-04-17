@@ -116,6 +116,20 @@ router.put('/users/:id', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/change-password', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Não autenticado' });
+  const { oldPassword, newPassword } = req.body;
+  try {
+    const { rows } = await q('SELECT * FROM users WHERE id=$1', [req.session.userId]);
+    if (!rows.length) return res.status(404).json({ error: 'Usuário não encontrado' });
+    const user = rows[0];
+    if (user.password !== oldPassword) return res.status(400).json({ error: 'Senha atual incorreta' });
+    if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres' });
+    await q('UPDATE users SET password=$1 WHERE id=$2', [newPassword, req.session.userId]);
+    send(res, { ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/users/:id', async (req, res) => {
   const { rows } = await q('SELECT perfil FROM users WHERE id=$1', [req.params.id]);
   if (rows[0]?.perfil === 'responsavel') return res.status(403).json({ error: 'Usuários com perfil Responsável não podem ser excluídos.' });

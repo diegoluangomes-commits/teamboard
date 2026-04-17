@@ -110,7 +110,6 @@ async function checkLocalAuth(){
 }
 
 function showApp(){
-  // Ajuste 2: garantir que topbar e layout ficam visíveis
   $('login-screen').style.display='none';
   const tb=document.querySelector('.topbar');
   const lay=document.querySelector('.layout');
@@ -122,8 +121,60 @@ function showApp(){
   const badge=perfil==='admin'
     ?'<span style="background:#EEEDFE;color:#3C3489;font-size:10px;padding:1px 7px;border-radius:8px;font-weight:500">Admin</span>'
     :'<span style="background:#EAF3DE;color:#27500A;font-size:10px;padding:1px 7px;border-radius:8px;font-weight:500">Responsável</span>';
-  if(loggedDiv)loggedDiv.innerHTML=`<span style="font-size:12px;color:var(--text)">${esc(currentUser?.name||'')}</span>${badge}<button class="btn btn-sm" onclick="doLogout()">Sair</button>`;
+  if(loggedDiv)loggedDiv.innerHTML=`
+    <span style="font-size:12px;color:var(--text)">${esc(currentUser?.name||'')}</span>
+    ${badge}
+    <button class="btn btn-sm" title="Alterar senha" onclick="openChangePassword()"
+      style="padding:4px 7px;font-size:11px">🔑</button>
+    <button class="btn btn-sm" onclick="doLogout()">Sair</button>`;
   applyPerfilRestrictions();
+}
+
+function openChangePassword(){
+  showModal(`<div class="modal" style="max-width:360px">
+    <h3>Alterar senha</h3>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Usuário: <strong>${esc(currentUser?.name||'')}</strong></div>
+    <div id="cp-error" style="display:none;background:#FCEBEB;color:#A32D2D;border:0.5px solid #F09595;border-radius:var(--r-md);padding:9px 12px;font-size:12px;margin-bottom:10px"></div>
+    <div class="fr"><label>Senha atual</label><input type="password" id="cp-old" placeholder="••••••••"/></div>
+    <div class="fr"><label>Nova senha</label><input type="password" id="cp-new" placeholder="Mínimo 6 caracteres"/></div>
+    <div class="fr"><label>Confirmar nova senha</label><input type="password" id="cp-confirm" placeholder="Repita a nova senha"/></div>
+    <div class="ma">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-blue" onclick="saveChangePassword()">Salvar senha</button>
+    </div>
+  </div>`);
+}
+
+async function saveChangePassword(){
+  const oldPwd=$('cp-old').value;
+  const newPwd=$('cp-new').value.trim();
+  const confirm=$('cp-confirm').value.trim();
+  const errDiv=$('cp-error');
+  errDiv.style.display='none';
+
+  if(!oldPwd||!newPwd||!confirm){
+    errDiv.textContent='Preencha todos os campos.';errDiv.style.display='block';return;
+  }
+  if(newPwd.length<6){
+    errDiv.textContent='A nova senha deve ter pelo menos 6 caracteres.';errDiv.style.display='block';return;
+  }
+  if(newPwd!==confirm){
+    errDiv.textContent='A nova senha e a confirmação não coincidem.';errDiv.style.display='block';return;
+  }
+
+  try{
+    const res=await fetch('/api/change-password',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({oldPassword:oldPwd,newPassword:newPwd})
+    });
+    const data=await res.json();
+    if(!res.ok){errDiv.textContent=data.error||'Erro ao alterar senha.';errDiv.style.display='block';return;}
+    closeModal();
+    showToast('Senha alterada com sucesso!','success');
+  }catch(e){
+    errDiv.textContent='Erro de conexão.';errDiv.style.display='block';
+  }
 }
 
 function applyPerfilRestrictions(){
