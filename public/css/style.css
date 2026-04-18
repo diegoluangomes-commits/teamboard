@@ -155,7 +155,7 @@ td { padding: 6px 9px; vertical-align: middle; overflow: hidden; text-overflow: 
 .notice-info { background: var(--blue-bg); border: 0.5px solid #85B7EB; color: #0C447C; border-radius: var(--r-md); padding: 9px 12px; font-size: 12px; display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
 
 /* ── Modal ── */
-.modal-wrap { display: none; background: rgba(0,0,0,0.30); padding: 24px 16px; min-height: 400px; align-items: flex-start; justify-content: center; }
+.modal-wrap { display: none; background: rgba(0,0,0,0.30); padding: 24px 16px; align-items: flex-start; justify-content: center; position: fixed; inset: 0; z-index: 100; overflow-y: auto; }
 .modal-wrap.open { display: flex; }
 .modal { background: var(--surface); border-radius: var(--r-lg); border: 0.5px solid var(--border); width: 540px; max-width: 100%; padding: 20px; max-height: 90vh; overflow-y: auto; }
 .modal h3 { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
