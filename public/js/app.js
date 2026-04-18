@@ -43,6 +43,8 @@ const fd = d  => { if (!d) return ''; const [y,m,dd] = d.slice(0,10).split('-');
 const today = new Date().toISOString().slice(0,10);
 const isOv  = (d,s) => d && d < today && s !== 'done' && s !== 'na' && s !== 'cancel';
 const esc   = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// Renderiza texto com quebras de linha (para comentários e descrições)
+const escNl = s => esc(s).replace(/\n/g,'<br>');
 
 // Busca dinâmica de owner e seller nos arrays carregados
 const ownerById   = id => owners.find(o => o.id === id) || {};
@@ -482,7 +484,21 @@ function renderKanban(ft) {
 }
 
 // ── Modal system ───────────────────────────────────────────
-function showModal(html){$('modal-area').innerHTML=`<div class="modal-wrap open" id="active-modal" onclick="if(event.target.id==='active-modal')closeModal()">${html}</div>`;updateSelects();}
+function showModal(html){
+  $('modal-area').innerHTML=`<div class="modal-wrap open" id="active-modal">${html}</div>`;
+  // Fecha modal apenas se clicar no fundo SEM ter arrastado (seleção de texto)
+  const wrap=$('active-modal');
+  let mouseDownTarget=null;
+  wrap.addEventListener('mousedown',e=>{ mouseDownTarget=e.target; });
+  wrap.addEventListener('click',e=>{
+    if(e.target.id==='active-modal' && mouseDownTarget?.id==='active-modal') closeModal();
+  });
+  // Sempre abre o modal com scroll no topo
+  wrap.scrollTop=0;
+  const modalEl=wrap.querySelector('.modal');
+  if(modalEl) modalEl.scrollTop=0;
+  updateSelects();
+}
 function closeModal(){$('modal-area').innerHTML='';pendingMeet=null;}
 
 // ── Task modal ─────────────────────────────────────────────
@@ -590,7 +606,7 @@ function taskHTML(t) {
               <span style="color:var(--text3)">${esc(c.time)}</span>
               ${mo?`<span style="background:#E6F1FB;color:#0C447C;padding:1px 6px;border-radius:6px;font-size:10px">@ ${esc(mo.name)}</span>`:''}
             </div>
-            <div class="cmt-text">${esc(c.text)}</div>
+            <div class="cmt-text" style="white-space:pre-wrap">${escNl(c.text)}</div>
           </div>
         </div>`;
       }).join('')||'<p style="font-size:11px;color:var(--text3);margin-bottom:7px">Nenhum comentário ainda.</p>'}</div>
@@ -601,8 +617,8 @@ function taskHTML(t) {
           ${owners.map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('')}
         </select>
       </div>
-      <div class="cir"><textarea id="new-cmt" placeholder="Escrever comentário..."></textarea>
-      <button class="btn btn-blue" onclick="submitComment()" style="height:44px;flex-shrink:0">Enviar</button></div>
+      <div class="cir"><textarea id="new-cmt" placeholder="Escrever comentário..." onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();submitComment();}"></textarea>
+      <button class="btn btn-blue" onclick="submitComment()" style="height:44px;flex-shrink:0" title="Enviar (Ctrl+Enter)">Enviar</button></div>
     </div>`:''}
     <div class="ma"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveTask()">Salvar tarefa</button></div>
   </div>`;
@@ -643,7 +659,7 @@ async function submitComment(){
         <span style="color:var(--text3)">${esc(c.time)}</span>
         ${mo?`<span style="background:#E6F1FB;color:#0C447C;padding:1px 6px;border-radius:6px;font-size:10px">@ ${esc(mo.name)}</span>`:''}
       </div>
-      <div class="cmt-text">${esc(txt)}</div>
+      <div class="cmt-text" style="white-space:pre-wrap">${escNl(txt)}</div>
     </div>
   </div>`);
   // Notificação por email para responsável mencionado
