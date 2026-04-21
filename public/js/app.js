@@ -598,15 +598,20 @@ function taskHTML(t) {
       <div id="cmt-list">${(t.comments||[]).map(c=>{
         const ao=ownerById(c.authorId);
         const mo=c.mentionId?ownerById(c.mentionId):null;
-        return `<div class="cmt-item">
+        const canEdit=currentUser?.perfil==='admin'||c.authorId===currentUser?.ownerId||c.author===currentUser?.name;
+        return `<div class="cmt-item" id="cmt-${c.id}">
           <div class="cmt-body">
             <div class="cmt-meta" style="display:flex;align-items:center;gap:6px">
               <span style="font-weight:500;color:var(--text)">${esc(c.author||ao.name||'?')}</span>
               <span style="color:var(--text3)">·</span>
               <span style="color:var(--text3)">${esc(c.time)}</span>
               ${mo?`<span style="background:#E6F1FB;color:#0C447C;padding:1px 6px;border-radius:6px;font-size:10px">@ ${esc(mo.name)}</span>`:''}
+              ${canEdit?`<span style="margin-left:auto;display:flex;gap:4px">
+                <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="editComment('${c.id}')">✏️</button>
+                <button class="btn btn-red btn-sm" style="padding:1px 6px;font-size:10px" onclick="deleteComment('${c.id}')">×</button>
+              </span>`:''}
             </div>
-            <div class="cmt-text" style="white-space:pre-wrap">${escNl(c.text)}</div>
+            <div class="cmt-text" style="white-space:pre-wrap" id="cmt-text-${c.id}">${escNl(c.text)}</div>
           </div>
         </div>`;
       }).join('')||'<p style="font-size:11px;color:var(--text3);margin-bottom:7px">Nenhum comentário ainda.</p>'}</div>
@@ -627,6 +632,12 @@ function openTaskModal(gi=0){editingTask=null;showModal(taskHTML(null));$('f-gro
 function openEditTask(id){
   const t=tasks.find(x=>x.id===id)||allCalTasks.find(x=>x.id===id);
   if(!t)return;
+  // Ajuste 1: garantir que o projeto ativo seja o da tarefa antes de abrir
+  if(t.projId && t.projId!==activeProj){
+    activeProj=t.projId;
+    // Recarrega tasks do projeto para ter contexto completo
+    api('GET','/tasks?projId='+activeProj).then(ts=>{tasks=ts;});
+  }
   editingTask=id;
   pendingMeet=t.meet?{...t.meet}:null;
   showModal(taskHTML(t));
@@ -676,6 +687,33 @@ async function submitComment(){
     });
   }
   tasks=await api('GET','/tasks?projId='+activeProj);
+}
+
+async function editComment(cmtId){
+  if(!editingTask)return;
+  const taskData=await api('GET','/tasks/'+editingTask);
+  const cmt=taskData.comments?.find(c=>c.id===cmtId);
+  if(!cmt)return;
+  const novoTexto=prompt('Editar comentário:',cmt.text);
+  if(novoTexto===null||novoTexto.trim()==='')return;
+  const newComments=taskData.comments.map(c=>c.id===cmtId?{...c,text:novoTexto.trim()}:c);
+  await api('PUT','/tasks/'+editingTask,{...taskData,comments:newComments});
+  // Atualiza só o texto na tela
+  const el=$('cmt-text-'+cmtId);
+  if(el){el.innerHTML=escNl(novoTexto.trim());}
+  tasks=await api('GET','/tasks?projId='+activeProj);
+}
+
+async function deleteComment(cmtId){
+  if(!editingTask)return;
+  if(!confirm('Excluir este comentário?'))return;
+  const taskData=await api('GET','/tasks/'+editingTask);
+  const newComments=(taskData.comments||[]).filter(c=>c.id!==cmtId);
+  await api('PUT','/tasks/'+editingTask,{...taskData,comments:newComments});
+  const el=$('cmt-'+cmtId);
+  if(el)el.remove();
+  tasks=await api('GET','/tasks?projId='+activeProj);
+  showToast('Comentário excluído.','success');
 }
 
 async function saveTask(){
@@ -1274,27 +1312,31 @@ function renderCalendar(){
   }
 
   const grid=document.createElement('div');
-  grid.style.cssText='display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:rgba(0,0,0,0.08);border:0.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden';
+  grid.style.cssText='display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:rgba(0,0,0,0.08);border:0.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden';
 
-  // Cabeçalho
-  ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(d=>{
+  // Cabeçalho — apenas dias úteis (Seg a Sex)
+  ['Seg','Ter','Qua','Qui','Sex'].forEach(d=>{
     const c=document.createElement('div');
     c.style.cssText='background:var(--surface2);padding:6px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);text-align:center;font-weight:500';
     c.textContent=d; grid.appendChild(c);
   });
 
-  // Dias mês anterior
-  for(let i=0;i<first;i++){
+  // Dias mês anterior — ajustar para semana começar na segunda (0=Dom→6, 1=Seg→0...)
+  const firstAdj = first===0 ? 4 : first-1; // Dom vira 4 dias antes, Seg=0, etc.
+  for(let i=0;i<firstAdj;i++){
+    const dayOfWeek=(i+1)%7; // não mostrar sáb/dom
     const c=document.createElement('div');
     c.style.cssText='background:var(--surface2);padding:5px 7px;min-height:90px';
-    c.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:3px">${prev-first+1+i}</div>`;
+    c.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:3px">${prev-firstAdj+1+i}</div>`;
     grid.appendChild(c);
   }
 
-  // Dias do mês
+  // Dias do mês — pular sábado (6) e domingo (0)
   const feriados=getFeriados(calY);
   for(let d=1;d<=dim;d++){
     const ds=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow=new Date(calY,calM,d).getDay(); // 0=Dom, 6=Sáb
+    if(dow===0||dow===6) continue; // pula fim de semana
     const isToday=ds===today;
     const isFeriado=!!feriados[ds];
     const feriadoNome=feriados[ds]||'';

@@ -212,13 +212,21 @@ router.post('/tasks', async (req, res) => {
   send(res, toTask(rows[0]));
 });
 
+router.get('/tasks/:id', async (req, res) => {
+  const { rows } = await q('SELECT * FROM tasks WHERE id=$1', [req.params.id]);
+  if (!rows.length) return notFound(res,'Tarefa');
+  send(res, toTask(rows[0]));
+});
+
 router.put('/tasks/:id', async (req, res) => {
-  const { name, projId, group, status, ownerId, priority, date, dateStart, dateEnd, turno, desc, meet } = req.body;
+  const { name, projId, group, status, ownerId, priority, date, dateStart, dateEnd, turno, desc, meet, comments } = req.body;
   const { rows } = await q(
-    'UPDATE tasks SET name=$1,proj_id=$2,grp=$3,status=$4,owner_id=$5,priority=$6,date=$7,date_start=$8,date_end=$9,turno=$10,descr=$11,meet=$12 WHERE id=$13 RETURNING *',
+    'UPDATE tasks SET name=$1,proj_id=$2,grp=$3,status=$4,owner_id=$5,priority=$6,date=$7,date_start=$8,date_end=$9,turno=$10,descr=$11,meet=$12,comments=$13 WHERE id=$14 RETURNING *',
     [name, projId||null, group||0, status||'pending', ownerId||null, priority||'medium',
      date||'', dateStart||'', dateEnd||'', turno||'manha', desc||'',
-     meet ? JSON.stringify(meet) : null, req.params.id]
+     meet ? JSON.stringify(meet) : null,
+     comments ? JSON.stringify(comments) : null,
+     req.params.id]
   );
   if (!rows.length) return notFound(res,'Tarefa');
   send(res, toTask(rows[0]));
