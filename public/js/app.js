@@ -728,14 +728,23 @@ async function saveTask(){
   const date=dateEnd||dateStart||$('f-date').value||'';
   const turno=document.querySelector('input[name="f-turno"]:checked')?.value||'manha';
   const newOwnerId=$('f-owner').value;
-  const body={name,projId:$('f-proj').value||activeProj,group:+$('f-group').value,
-    status:$('f-status').value,ownerId:newOwnerId,priority:$('f-priority').value,
-    date,dateStart,dateEnd,turno,desc:$('f-desc').value,meet:meetData};
-
-  // Verifica se é tarefa nova ou troca de responsável
-  const oldTask=editingTask?tasks.find(x=>x.id===editingTask):null;
+  const oldTask=editingTask?tasks.find(x=>x.id===editingTask)||allCalTasks.find(x=>x.id===editingTask):null;
   const isNew=!editingTask;
   const ownerChanged=oldTask&&oldTask.ownerId!==newOwnerId;
+
+  // Busca comentários atuais do banco para não perder comentários recém adicionados
+  let currentComments=oldTask?.comments||[];
+  if(editingTask){
+    try{
+      const fresh=await api('GET','/tasks/'+editingTask);
+      currentComments=fresh?.comments||currentComments;
+    }catch(e){}
+  }
+
+  const body={name,projId:$('f-proj').value||activeProj,group:+$('f-group').value,
+    status:$('f-status').value,ownerId:newOwnerId,priority:$('f-priority').value,
+    date,dateStart,dateEnd,turno,desc:$('f-desc').value,meet:meetData,
+    comments:currentComments};
 
   // Verifica se responsável está ausente no período da tarefa
   if(newOwnerId&&(dateStart||date)){
