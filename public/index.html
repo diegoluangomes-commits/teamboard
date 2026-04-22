@@ -189,7 +189,17 @@
 
     <!-- Notificações -->
     <div class="page" id="page-notif">
-      <div class="ph"><div class="ptitle">Notificações</div></div>
+      <div class="ph">
+        <div class="ptitle">Notificações</div>
+        <div class="ctrls">
+          <select id="notif-fil-proj" onchange="renderNotifs()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
+            <option value="">Todos os projetos</option>
+          </select>
+          <select id="notif-fil-user" onchange="renderNotifs()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);display:none">
+            <option value="">Todos os responsáveis</option>
+          </select>
+        </div>
+      </div>
       <div id="notif-list"></div>
     </div>
 

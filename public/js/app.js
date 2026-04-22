@@ -1210,31 +1210,93 @@ async function deleteSeller(id){if(!canDelete())return;if(!confirm('Excluir vend
 // ── Notificações ───────────────────────────────────────────
 function renderNotifs(){
   const in3=new Date(Date.now()+3*864e5).toISOString().slice(0,10);
-  const ov=tasks.filter(t=>isOv(t.date,t.status));
-  const sn=tasks.filter(t=>t.date&&t.date>=today&&t.date<=in3&&t.status!=='done'&&t.status!=='na'&&t.status!=='cancel');
+  const isAdmin=currentUser?.perfil==='admin';
+
+  // Atualizar filtro de projetos
+  const fpEl=$('notif-fil-proj');
+  if(fpEl&&fpEl.options.length<=1){
+    projects.forEach(p=>{
+      const o=document.createElement('option');
+      o.value=p.id;o.textContent=p.name;
+      fpEl.appendChild(o);
+    });
+  }
+
+  // Mostrar filtro de responsável apenas para admin
+  const fuEl=$('notif-fil-user');
+  if(fuEl){
+    fuEl.style.display=isAdmin?'':'none';
+    if(isAdmin&&fuEl.options.length<=1){
+      owners.forEach(o=>{
+        const opt=document.createElement('option');
+        opt.value=o.id;opt.textContent=o.name;
+        fuEl.appendChild(opt);
+      });
+    }
+  }
+
+  const fp=$('notif-fil-proj')?.value||'';
+  const fu=$('notif-fil-user')?.value||'';
+
+  // Fonte de tasks: admin vê todas, responsável vê só as suas
+  let src=allCalTasks.length?allCalTasks:tasks;
+  if(!isAdmin){
+    // Filtrar apenas tasks do responsável logado
+    const myOwnerId=currentUser?.ownerId||'';
+    src=src.filter(t=>t.ownerId===myOwnerId);
+  }
+
+  // Aplicar filtros
+  if(fp) src=src.filter(t=>t.projId===fp);
+  if(fu) src=src.filter(t=>t.ownerId===fu);
+
+  const ov=src.filter(t=>isOv(t.date||t.dateEnd,t.status));
+  const sn=src.filter(t=>{
+    const d=t.date||t.dateEnd||'';
+    return d&&d>=today&&d<=in3&&t.status!=='done'&&t.status!=='na'&&t.status!=='cancel';
+  });
   const tot=ov.length+sn.length;
+
+  // Badge no sino
   $('notif-dot').style.display=tot>0?'block':'none';
   const nb=$('nb');if(tot>0){nb.textContent=tot;nb.style.display='inline';}else nb.style.display='none';
+
   const list=$('notif-list');if(!list)return;
-  if(!tot){list.innerHTML='<div style="padding:22px;text-align:center;color:var(--text2)">Sem notificações pendentes</div>';return;}
-  list.innerHTML='<div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden">'+
-    ov.map(t=>`<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border)">
-      <div style="width:26px;height:26px;border-radius:50%;background:#FCEBEB;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#A32D2D" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><line x1="6" y1="3.5" x2="6" y2="6.5"/><circle cx="6" cy="8.5" r=".5" fill="#A32D2D"/></svg>
+
+  if(!tot){
+    list.innerHTML='<div style="padding:22px;text-align:center;color:var(--text2)">Sem notificações pendentes</div>';
+    return;
+  }
+
+  const mkItem=(t,tipo)=>{
+    const proj=projects.find(p=>p.id===t.projId)||{};
+    const owner=ownerById(t.ownerId);
+    const isAtrasada=tipo==='atrasada';
+    const cor=isAtrasada?'#A32D2D':'#854F0B';
+    const bg=isAtrasada?'#FCEBEB':'#FAEEDA';
+    const icon=isAtrasada
+      ?`<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="${cor}" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><line x1="6" y1="3.5" x2="6" y2="6.5"/><circle cx="6" cy="8.5" r=".5" fill="${cor}"/></svg>`
+      :`<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="${cor}" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><line x1="6" y1="3" x2="6" y2="6.5"/><line x1="6" y1="6.5" x2="8.5" y2="8.5"/></svg>`;
+    const label=isAtrasada?`<span class="pill s-cancel">Atrasada</span>`:`<span class="pill s-pending">Em breve</span>`;
+    const dataLabel=isAtrasada?'Prazo':'Vence';
+    return `<div onclick="openEditTask('${t.id}')" style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);cursor:pointer;transition:background .1s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <div style="width:26px;height:26px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;flex-shrink:0">${icon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500;color:${isAtrasada?cor:'var(--text)'};font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.name)}</div>
+        <div style="font-size:11px;color:var(--text2);display:flex;gap:8px;flex-wrap:wrap;margin-top:1px">
+          <span>${dataLabel}: ${fd(t.date||t.dateEnd)}</span>
+          ${owner?.name?`<span>· ${esc(owner.name)}</span>`:''}
+          ${proj.name?`<span style="color:var(--text3)">· ${esc(proj.name)}</span>`:''}
+        </div>
       </div>
-      <div style="flex:1"><div style="font-weight:500;color:#A32D2D;font-size:12px">${esc(t.name)}</div>
-      <div style="font-size:11px;color:var(--text2)">Prazo: ${fd(t.date)} · ${esc(ownerById(t.ownerId)?.name||'?')}</div></div>
-      <span class="pill s-cancel">Atrasada</span>
-    </div>`).join('')+
-    sn.map(t=>`<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border)">
-      <div style="width:26px;height:26px;border-radius:50%;background:#FAEEDA;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#854F0B" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><line x1="6" y1="3" x2="6" y2="6.5"/><line x1="6" y1="6.5" x2="8.5" y2="8.5"/></svg>
-      </div>
-      <div style="flex:1"><div style="font-weight:500;font-size:12px">${esc(t.name)}</div>
-      <div style="font-size:11px;color:var(--text2)">Vence: ${fd(t.date)} · ${esc(ownerById(t.ownerId)?.name||'?')}</div></div>
-      <span class="pill s-pending">Em breve</span>
-    </div>`).join('')+
-  '</div>';
+      ${label}
+    </div>`;
+  };
+
+  list.innerHTML=`<div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden">
+    ${ov.map(t=>mkItem(t,'atrasada')).join('')}
+    ${sn.map(t=>mkItem(t,'embreve')).join('')}
+  </div>`;
 }
 
 // ── Calendário ─────────────────────────────────────────────
@@ -1321,10 +1383,12 @@ function renderCalendar(){
     c.textContent=d; grid.appendChild(c);
   });
 
-  // Dias mês anterior — ajustar para semana começar na segunda (0=Dom→6, 1=Seg→0...)
-  const firstAdj = first===0 ? 4 : first-1; // Dom vira 4 dias antes, Seg=0, etc.
+  // Dias mês anterior — ajustar para semana começar na segunda
+  // first: 0=Dom,1=Seg,2=Ter,3=Qua,4=Qui,5=Sex,6=Sáb
+  // Na grade Seg-Sex: Seg=col0, Ter=col1, ... Sex=col4
+  // Dom e Sáb não existem — se o mês começa no Dom, mostra 4 células vazias (Seg-Qui do mês anterior)
+  const firstAdj = first===0 ? 4 : (first===6 ? 0 : first-1);
   for(let i=0;i<firstAdj;i++){
-    const dayOfWeek=(i+1)%7; // não mostrar sáb/dom
     const c=document.createElement('div');
     c.style.cssText='background:var(--surface2);padding:5px 7px;min-height:90px';
     c.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:3px">${prev-firstAdj+1+i}</div>`;
@@ -1758,6 +1822,7 @@ function goPage(p){
   if(p==='users')    renderUsersTable();
   if(p==='ausencias')renderAusenciasTable();
   if(p==='projects') renderProjGrid();
+  if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
 }
 function switchView(v,el){
