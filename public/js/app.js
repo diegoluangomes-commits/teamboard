@@ -568,9 +568,13 @@ function taskHTML(t) {
             <div class="fr"><label>Duração</label><select id="meet-dur">
               <option value="15">15 min</option><option value="30">30 min</option>
               <option value="60" selected>1 hora</option><option value="90">1h30</option><option value="120">2 horas</option>
+              <option value="180">3 horas</option>
             </select></div>
           </div>
-          <div class="fr"><label>Data</label><input type="date" id="meet-date" value="${t?.date||today}"/></div>
+          <div class="f2">
+            <div class="fr"><label>Data</label><input type="date" id="meet-date" value="${t?.date||today}"/></div>
+            <div class="fr"><label>Horário</label><input type="time" id="meet-time" value="09:00"/></div>
+          </div>
           <div class="fr"><label>Participantes (e-mails separados por vírgula)</label><input id="meet-parts" placeholder="email@empresa.com, ..."/></div>
           <button class="btn btn-blue" style="width:100%;margin-top:4px;justify-content:center" onclick="createMeetFromTask()">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><rect x=".5" y="1.5" width="7.5" height="9" rx="1.2"/><path d="M8 4l3.5-2v8L8 8"/></svg>
@@ -775,13 +779,16 @@ function highlightTurno(){
 
 async function createMeetFromTask(){
   const title=$('meet-title').value.trim()||$('f-name').value.trim()||'Reunião TeamSolidez';
-  const date=$('meet-date').value,dur=+$('meet-dur').value,parts=$('meet-parts').value;
+  const date=$('meet-date').value;
+  const time=$('meet-time').value||'09:00';
+  const dur=+$('meet-dur').value;
+  const parts=$('meet-parts').value;
   const btn=document.querySelector('#meet-create-area .btn-blue');
   if(btn)btn.style.display='none';
   $('meet-creating').style.display='block';
   try{
     const data=await fetch('/meet/create',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({title,date,time:'09:00',duration:dur,participants:parts})}).then(r=>r.json());
+      body:JSON.stringify({title,date,time,duration:dur,participants:parts})}).then(r=>r.json());
     $('meet-creating').style.display='none';
     if(data.error){showToast('Erro: '+data.error,'error');if(btn)btn.style.display='flex';return;}
     pendingMeet={meetUrl:data.meetUrl,eventId:data.eventId||'',title:data.title||title};
