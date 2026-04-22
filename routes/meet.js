@@ -39,10 +39,12 @@ router.post('/create', requireAuth, async (req, res) => {
   try {
     const calendar = buildCalendarClient(req.session.tokens);
 
-    // Monta data/hora de início e fim
-    const startISO = date
-      ? new Date(`${date}T${time}:00`).toISOString()
+    // Monta data/hora de início e fim com fuso de Brasília (UTC-3)
+    // Usa offset fixo -03:00 para evitar conversão automática do servidor (que está em UTC)
+    const startLocal = date
+      ? `${date}T${time}:00-03:00`
       : new Date().toISOString();
+    const startISO = new Date(startLocal).toISOString();
     const endISO   = new Date(new Date(startISO).getTime() + duration * 60000).toISOString();
 
     // Lista de e-mails dos participantes
