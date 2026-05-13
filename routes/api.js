@@ -7,6 +7,92 @@ const send     = (res, data) => res.json(data);
 const notFound = (res, e)   => res.status(404).json({ error: `${e} não encontrado` });
 const q        = (sql, p)   => pool.query(sql, p);
 
+// ── Chave de API para integração externa ──────────────────
+const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY || 'solidez-team-api-2024';
+
+function requireApiKey(req, res, next) {
+  const key = req.headers['x-api-key'] || req.query.apiKey;
+  if (key !== EXTERNAL_API_KEY) {
+    return res.status(401).json({ error: 'Chave de API inválida' });
+  }
+  next();
+}
+
+// ── Rotas de integração externa (autenticação por API Key) ──
+
+// GET /api/ext/projects — lista todos os projetos com clientes
+router.get('/ext/projects', requireApiKey, async (req, res) => {
+  const { rows } = await q(`
+    SELECT p.id, p.name, p.color, p.date_start, p.date_end,
+           c.name as client_name
+    FROM projects p
+    LEFT JOIN clients c ON c.id = p.client_id
+    ORDER BY p.name
+  `);
+  send(res, rows.map(r => ({
+    id: r.id, name: r.name, color: r.color,
+    dateStart: r.date_start||'', dateEnd: r.date_end||'',
+    clientName: r.client_name||''
+  })));
+});
+
+// GET /api/ext/projects/:id/tasks — lista tarefas de um projeto
+router.get('/ext/projects/:id/tasks', requireApiKey, async (req, res) => {
+  const { rows } = await q(`
+    SELECT t.id, t.name, t.status, t.grp, t.date_end,
+           o.name as owner_name
+    FROM tasks t
+    LEFT JOIN owners o ON o.id = t.owner_id
+    WHERE t.proj_id = $1
+    ORDER BY t.grp, t.name
+  `, [req.params.id]);
+  send(res, rows.map(r => ({
+    id: r.id, name: r.name, status: r.status,
+    group: r.grp, dateEnd: r.date_end||'',
+    ownerName: r.owner_name||''
+  })));
+});
+
+// POST /api/ext/tasks/:id/comments — adiciona comentário numa tarefa
+router.post('/ext/tasks/:id/comments', requireApiKey, async (req, res) => {
+  const { text, author } = req.body;
+  if (!text) return res.status(400).json({ error: 'Texto obrigatório' });
+  const { rows } = await q('SELECT * FROM tasks WHERE id=$1', [req.params.id]);
+  if (!rows.length) return notFound(res, 'Tarefa');
+  const task = rows[0];
+  const comments = task.comments || [];
+  const newComment = {
+    id: uuidv4(),
+    author: author || 'Resumo de Reunião',
+    authorId: '',
+    text,
+    time: new Date().toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short', timeZone:'America/Sao_Paulo' }),
+    mentionId: null
+  };
+  comments.push(newComment);
+  await q('UPDATE tasks SET comments=$1 WHERE id=$2', [JSON.stringify(comments), req.params.id]);
+  send(res, { ok: true, comment: newComment });
+});
+
+// POST /api/ext/projects/:id/tasks — cria nova tarefa em um projeto
+router.post('/ext/projects/:id/tasks', requireApiKey, async (req, res) => {
+  const { name, desc, ownerId, dateEnd, group } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
+  const id = uuidv4();
+  const { rows } = await q(
+    `INSERT INTO tasks (id,name,proj_id,grp,status,owner_id,priority,date,date_start,date_end,turno,descr,comments,meet)
+     VALUES ($1,$2,$3,$4,'pending',$5,'medium',$6,$6,$6,'manha',$7,'[]',null) RETURNING *`,
+    [id, name, req.params.id, group||0, ownerId||null, dateEnd||'', desc||'']
+  );
+  send(res, { ok: true, task: toTask(rows[0]) });
+});
+
+// GET /api/ext/owners — lista responsáveis ativos
+router.get('/ext/owners', requireApiKey, async (req, res) => {
+  const { rows } = await q('SELECT id, name, email FROM owners WHERE active=true ORDER BY name');
+  send(res, rows);
+});
+
 // ── helpers de mapeamento ──────────────────────────────────
 const toProject = r => r ? ({
   id: r.id, name: r.name, color: r.color, desc: r.descr,
@@ -419,7 +505,14 @@ router.post('/notify', async (req, res) => {
   try {
     const { rows } = await q('SELECT * FROM owners WHERE id=$1', [toOwnerId]);
     const owner = rows[0];
-    if (!owner?.email) return send(res, { ok: false, reason: 'Responsável sem e-mail' });
+
+    // Busca e-mail do owner ou do usuário vinculado ao owner
+    let email = owner?.email || '';
+    if (!email) {
+      const { rows: urows } = await q('SELECT email FROM users WHERE owner_id=$1 AND active=true LIMIT 1', [toOwnerId]);
+      email = urows[0]?.email || '';
+    }
+    if (!email) return send(res, { ok: false, reason: 'Responsável sem e-mail' });
 
     let subject = '', text = '';
     if (type === 'task_assigned') {
@@ -427,13 +520,13 @@ router.post('/notify', async (req, res) => {
       const meetSection = meetUrl
         ? `\n🔗 Link do Meet:\n${meetUrl}\n`
         : '';
-      text = `Olá ${owner.name},\n\nVocê recebeu uma nova tarefa no TeamSolidez!\n\n📋 Tarefa: ${taskName}\n📁 Projeto: ${projName||'—'}\n👤 Atribuída por: ${fromName}${meetSection}\n\nAcesse o sistema para ver todos os detalhes:\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
+      text = `Olá ${owner.name},\n\nVocê recebeu uma nova tarefa no TeamSolidez!\n\n📋 Tarefa: ${taskName}\n📁 Projeto: ${projName||'—'}\n👤 Atribuída por: ${fromName}${meetSection}\n\nAcesse o sistema para ver todos os detalhes:\n👉 https://solidezteam.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     } else if (type === 'comment_mention') {
       subject = `[TeamSolidez] Você foi mencionado em um comentário`;
-      text    = `Olá ${owner.name},\n\n${fromName} mencionou você em um comentário na tarefa "${taskName}":\n\n📁 Projeto: ${projName||'—'}\n💬 "${comment}"\n\nAcesse o sistema para responder:\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
+      text    = `Olá ${owner.name},\n\n${fromName} mencionou você em um comentário na tarefa "${taskName}":\n\n📁 Projeto: ${projName||'—'}\n💬 "${comment}"\n\nAcesse o sistema para responder:\n👉 https://solidezteam.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     } else if (type === 'meet_created') {
       subject = `[TeamSolidez] Reunião criada para a tarefa: ${taskName}`;
-      text    = `Olá ${owner.name},\n\nUma reunião Google Meet foi criada para você!\n\n📋 Tarefa: ${taskName}\n📁 Projeto: ${projName||'—'}\n📅 Reunião: ${meetTitle||taskName}\n👤 Criada por: ${fromName}\n\n🔗 Link do Meet:\n${meetUrl}\n\nAcesse o link acima para entrar na reunião.\n👉 https://team.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
+      text    = `Olá ${owner.name},\n\nUma reunião Google Meet foi criada para você!\n\n📋 Tarefa: ${taskName}\n📁 Projeto: ${projName||'—'}\n📅 Reunião: ${meetTitle||taskName}\n👤 Criada por: ${fromName}\n\n🔗 Link do Meet:\n${meetUrl}\n\nAcesse o link acima para entrar na reunião.\n👉 https://solidezteam.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     }
 
     const nodemailer = require('nodemailer');
@@ -443,8 +536,8 @@ router.post('/notify', async (req, res) => {
       secure: process.env.SMTP_SECURE==='true',
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
     });
-    await transporter.sendMail({ from:`"TeamBoard" <${process.env.SMTP_USER}>`, to: owner.email, subject, text });
-    send(res, { ok: true, sent: true, to: owner.email });
+    await transporter.sendMail({ from:`"TeamSolidez" <${process.env.SMTP_USER}>`, to: email, subject, text });
+    send(res, { ok: true, sent: true, to: email });
   } catch(err) {
     console.log(`[Notificação] ${err.message}`);
     send(res, { ok: true, sent: false, reason: err.message });

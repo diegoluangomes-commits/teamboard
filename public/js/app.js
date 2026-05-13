@@ -720,8 +720,15 @@ async function deleteComment(cmtId){
   showToast('Comentário excluído.','success');
 }
 
+let savingTask=false;
 async function saveTask(){
-  const name=$('f-name').value.trim();if(!name)return;
+  if(savingTask)return; // evita duplo clique
+  savingTask=true;
+  const btnSave=document.querySelector('.btn-blue[onclick="saveTask()"]');
+  if(btnSave){btnSave.disabled=true;btnSave.textContent='Salvando...';}
+
+  try{
+  const name=$('f-name').value.trim();if(!name){savingTask=false;if(btnSave){btnSave.disabled=false;btnSave.textContent='Salvar tarefa';}return;}
   const meetData=pendingMeet?{...pendingMeet}:null;
   const dateStart=$('f-date-start').value||'';
   const dateEnd=$('f-date-end').value||'';
@@ -732,14 +739,8 @@ async function saveTask(){
   const isNew=!editingTask;
   const ownerChanged=oldTask&&oldTask.ownerId!==newOwnerId;
 
-  // Busca comentários atuais do banco para não perder comentários recém adicionados
-  let currentComments=oldTask?.comments||[];
-  if(editingTask){
-    try{
-      const fresh=await api('GET','/tasks/'+editingTask);
-      currentComments=fresh?.comments||currentComments;
-    }catch(e){}
-  }
+  // Usa comentários já carregados em memória — evita GET extra que causava lentidão
+  const currentComments=oldTask?.comments||[];
 
   const body={name,projId:$('f-proj').value||activeProj,group:+$('f-group').value,
     status:$('f-status').value,ownerId:newOwnerId,priority:$('f-priority').value,
@@ -759,24 +760,28 @@ async function saveTask(){
   if(editingTask){await api('PUT','/tasks/'+editingTask,body);}
   else{await api('POST','/tasks',body);}
 
-  // Ajuste 4: notificar responsável quando for nova tarefa ou quando trocar o responsável
+  // Notificar responsável quando for nova tarefa ou quando trocar o responsável
   if(newOwnerId&&(isNew||ownerChanged)){
     const projNome=projects.find(p=>p.id===(body.projId||activeProj))?.name||'';
-    await api('POST','/notify',{
-      type:'task_assigned',
-      toOwnerId:newOwnerId,
-      fromName:currentUser?.name||'Sistema',
-      taskName:name,
-      projName:projNome,
-      meetUrl:meetData?.meetUrl||''
-    });
+    const owner=ownerById(newOwnerId);
+    if(owner?.email){
+      api('POST','/notify',{
+        type:'task_assigned',
+        toOwnerId:newOwnerId,
+        fromName:currentUser?.name||'Sistema',
+        taskName:name,
+        projName:projNome,
+        meetUrl:meetData?.meetUrl||''
+      });
+    }
   }
-
-  // Link do Meet já incluído no e-mail de task_assigned — não dispara e-mail separado
-  // if(newOwnerId && meetData?.meetUrl){ ... }
 
   tasks=await api('GET','/tasks?projId='+activeProj);
   closeModal();renderBoard();
+  }finally{
+    savingTask=false;
+    if(btnSave){btnSave.disabled=false;btnSave.textContent='Salvar tarefa';}
+  }
 }
 
 function highlightTurno(){
