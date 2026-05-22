@@ -502,8 +502,10 @@ router.delete('/templates/:id', async (req, res) => {
 // ── Notificações por email ─────────────────────────────────
 router.post('/notify', async (req, res) => {
   const { type, toOwnerId, fromName, taskName, projName, comment, meetUrl, meetTitle } = req.body;
+  console.log(`[Notify] Rota chamada! type=${type} toOwnerId=${toOwnerId}`);  // ← adicionar
   try {
     const { rows } = await q('SELECT * FROM owners WHERE id=$1', [toOwnerId]);
+    console.log(`[Notify] Owner encontrado: ${rows[0]?.name} email=${rows[0]?.email}`);  // ← adicionar
     const owner = rows[0];
 
     // Busca e-mail do owner ou do usuário vinculado ao owner
