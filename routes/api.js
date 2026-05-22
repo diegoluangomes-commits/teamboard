@@ -529,9 +529,6 @@ router.post('/notify', async (req, res) => {
       text    = `Olá ${owner.name},\n\nUma reunião Google Meet foi criada para você!\n\n📋 Tarefa: ${taskName}\n📁 Projeto: ${projName||'—'}\n📅 Reunião: ${meetTitle||taskName}\n👤 Criada por: ${fromName}\n\n🔗 Link do Meet:\n${meetUrl}\n\nAcesse o link acima para entrar na reunião.\n👉 https://solidezteam.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     }
     
-    const nodemailer = require('nodemailer');
-    if (!process.env.SMTP_HOST) throw new Error('SMTP não configurado');
-    const nodemailer = require('nodemailer');
 console.log(`[Notify] Iniciando envio para: ${email}`);
 console.log(`[Notify] SMTP_USER: ${process.env.SMTP_USER}`);
 console.log(`[Notify] SMTP_HOST: ${process.env.SMTP_HOST}`);
