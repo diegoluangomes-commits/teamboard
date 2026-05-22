@@ -765,8 +765,8 @@ async function saveTask(){
     const projNome=projects.find(p=>p.id===(body.projId||activeProj))?.name||'';
     const owner=ownerById(newOwnerId);
     if(owner?.email){
-      api('POST','/notify',{
-        type:'task_assigned',
+      await api('POST','/notify',{
+  type:'task_assigned',
         toOwnerId:newOwnerId,
         fromName:currentUser?.name||'Sistema',
         taskName:name,
