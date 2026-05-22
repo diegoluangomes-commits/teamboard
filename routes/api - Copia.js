@@ -528,34 +528,16 @@ router.post('/notify', async (req, res) => {
       subject = `[TeamSolidez] Reunião criada para a tarefa: ${taskName}`;
       text    = `Olá ${owner.name},\n\nUma reunião Google Meet foi criada para você!\n\n📋 Tarefa: ${taskName}\n📁 Projeto: ${projName||'—'}\n📅 Reunião: ${meetTitle||taskName}\n👤 Criada por: ${fromName}\n\n🔗 Link do Meet:\n${meetUrl}\n\nAcesse o link acima para entrar na reunião.\n👉 https://solidezteam.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
     }
-    
+
     const nodemailer = require('nodemailer');
     if (!process.env.SMTP_HOST) throw new Error('SMTP não configurado');
-    const nodemailer = require('nodemailer');
-console.log(`[Notify] Iniciando envio para: ${email}`);
-console.log(`[Notify] SMTP_USER: ${process.env.SMTP_USER}`);
-console.log(`[Notify] SMTP_HOST: ${process.env.SMTP_HOST}`);
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  },
-  tls: { rejectUnauthorized: false }
-});
-console.log(`[Notify] Verificando conexão SMTP...`);
-await transporter.verify();
-console.log(`[Notify] Conexão OK! Enviando email...`);
-await transporter.sendMail({
-  from: `"TeamSolidez" <${process.env.SMTP_USER}>`,
-  to: email,
-  subject,
-  text
-});
-console.log(`[Notify] Email enviado com sucesso para ${email}`);
-send(res, { ok: true, sent: true, to: email });
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST, port: +process.env.SMTP_PORT||587,
+      secure: process.env.SMTP_SECURE==='true',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    });
+    await transporter.sendMail({ from:`"TeamSolidez" <${process.env.SMTP_USER}>`, to: email, subject, text });
+    send(res, { ok: true, sent: true, to: email });
   } catch(err) {
     console.log(`[Notificação] ${err.message}`);
     send(res, { ok: true, sent: false, reason: err.message });
