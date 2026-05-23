@@ -1960,7 +1960,11 @@ function goPage(p){
   if(p==='templates')renderTemplates();
   if(p==='users')    renderUsersTable();
   if(p==='ausencias')renderAusenciasTable();
-  if(p==='agendas-ctrl'){loadAllTasksForCal().then(renderAgendasCtrl);}
+  if(p==='agendas-ctrl'){loadAllTasksForCal().then(()=>{
+  const yearSel=$('ag-filter-year');
+  if(yearSel) yearSel.innerHTML='';
+  renderAgendasCtrl();
+});}
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
