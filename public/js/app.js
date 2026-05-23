@@ -2014,6 +2014,9 @@ function goPage(p){
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('act'));
   document.getElementById('page-'+p)?.classList.add('active');
   document.getElementById('ni-'+p)?.classList.add('act');
+  // Sempre rola conteúdo e sidebar para o topo ao trocar de página
+  document.querySelector('.content')?.scrollTo(0,0);
+  document.querySelector('.sidebar')?.scrollTo(0,0);
   if(p==='clients')  renderClientsTable();
   if(p==='products') renderProductsTable();
   if(p==='owners')   renderOwnersTable();
@@ -2026,10 +2029,6 @@ function goPage(p){
     const ownerSel=$('ag-filter-owner');if(ownerSel)ownerSel.innerHTML='';
     const projSel=$('ag-filter-proj');if(projSel)projSel.innerHTML='';
     switchAgTab('owner');
-    setTimeout(()=>{
-      document.querySelector('.content')?.scrollTo(0,0);
-      document.querySelector('.sidebar')?.scrollTo(0,0);
-    },150);
   });}
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
