@@ -315,7 +315,7 @@ function renderProjGrid() {
       ${cli.name?`<div style="font-size:11px;color:var(--text2);margin-bottom:1px">${esc(cli.name)}</div>`:''}
       ${prod.name?`<div style="font-size:10px;color:var(--text3)">${esc(prod.name)}</div>`:''}
       <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
-        <div style="font-size:11px;color:var(--text2);flex:1">${pt.length} tarefas · ${pct}% concluído</div>
+        <div style="font-size:11px;color:var(--text2);flex:1">${pt.length} tarefas · ${pct}% concluído${p.qtdAgendas?` · 📅 ${p.qtdAgendas} agendas`:''}</div>
         ${hasDesc?`<button onclick="event.stopPropagation();showProjDesc('${p.id}')" title="Ver descrição"
           style="background:none;border:none;cursor:pointer;padding:2px;color:var(--text3);display:flex;align-items:center">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3">
@@ -867,7 +867,10 @@ function projHTML(p) {
       <div class="fr"><label>Data início</label><input type="date" id="p-date-start" value="${p?.dateStart||''}"/></div>
       <div class="fr"><label>Previsão de conclusão</label><input type="date" id="p-date-end" value="${p?.dateEnd||''}"/></div>
     </div>
-    <div class="fr"><label>Descrição</label><textarea id="p-desc">${esc(p?.desc||'')}</textarea></div>
+    <div class="f2">
+      <div class="fr"><label>Qtd. Agendas Contratadas</label><input type="number" id="p-qtd-agendas" min="0" value="${p?.qtdAgendas||''}" placeholder="Ex: 12"/></div>
+      <div class="fr"><label>Descrição</label><textarea id="p-desc">${esc(p?.desc||'')}</textarea></div>
+    </div>
     ${!p&&templates.length?`
     <div class="section-sep"></div>
     <div style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Modelo de tarefas</div>
@@ -886,7 +889,8 @@ async function saveProj(){
   const body={name,color:$('p-color').value,clientId:$('p-client')?.value||null,
     productId:$('p-product')?.value||null,sellerId:$('p-seller')?.value||null,
     ownerId:$('p-owner')?.value||null,desc:$('p-desc')?.value||'',
-    dateStart:$('p-date-start')?.value||'',dateEnd:$('p-date-end')?.value||''};
+    dateStart:$('p-date-start')?.value||'',dateEnd:$('p-date-end')?.value||'',
+    qtdAgendas:+$('p-qtd-agendas')?.value||0};
   const tplId=$('p-template')?.value||'';
   if(editingProj){
     await api('PUT','/projects/'+editingProj,body);
@@ -1617,10 +1621,14 @@ function calRenderDayList(ft, day){
     const ownerColor=o.color||'#888';
     const turnoIcon=t.turno==='tarde'?'🌙':'☀️';
     const turnoLabel=t.turno==='tarde'?'Tarde':'Manhã';
-    return `<div onclick="openEditTask('${t.id}')" style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);cursor:pointer;transition:background .1s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+    return `<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);transition:background .1s;${t.status==='done'?'opacity:.75':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
       <div style="width:3px;height:40px;border-radius:2px;background:${ownerColor};flex-shrink:0"></div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.name)}</div>
+      <div onclick="event.stopPropagation();toggleDoneCalTask('${t.id}')" title="${t.status==='done'?'Marcar como pendente':'Marcar como realizado'}"
+        style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${t.status==='done'?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${t.status==='done'?'#3B6D11':'transparent'};flex-shrink:0">
+        ${t.status==='done'?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+      </div>
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="openEditTask('${t.id}')">
+        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${t.status==='done'?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:6px">
           <span>${esc(proj.name||'')}</span>
           ${cli.name?`<span style="background:#EEEDFE;color:#3C3489;padding:0 4px;border-radius:3px;font-size:10px">${esc(cli.name)}</span>`:''}
@@ -1642,6 +1650,18 @@ function calNav(d){
   if(calM>11){calM=0;calY++;}
   else if(calM<0){calM=11;calY--;}
   renderCalendar();
+}
+
+async function toggleDoneCalTask(id){
+  const t=allCalTasks.find(x=>x.id===id)||tasks.find(x=>x.id===id);
+  if(!t)return;
+  const newStatus=t.status==='done'?'pending':'done';
+  await api('PUT','/tasks/'+id,{...t,status:newStatus});
+  // Atualiza nos dois arrays
+  if(allCalTasks.find(x=>x.id===id)) allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:newStatus}:x);
+  if(tasks.find(x=>x.id===id)) tasks=tasks.map(x=>x.id===id?{...x,status:newStatus}:x);
+  renderCalendar();
+  showToast(newStatus==='done'?'✅ Agenda marcada como realizada!':'↩️ Agenda desmarcada','success');
 }
 
 // ── Users ──────────────────────────────────────────────────
@@ -1832,6 +1852,101 @@ function checkAusencia(ownerId, dateStart, dateEnd){
     a.dateStart<=end && a.dateEnd>=dateStart
   );
 }
+// ── Controle de Agendas ────────────────────────────────────
+function renderAgendasCtrl(){
+  const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const yearSel=$('ag-filter-year');
+  const ownerSel=$('ag-filter-owner');
+  if(!yearSel||!ownerSel)return;
+
+  // Populate year selector
+  const years=[...new Set(allCalTasks.map(t=>(t.dateStart||t.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  if(!years.length) years.push(new Date().getFullYear().toString());
+  const curYear=yearSel.value||years[0];
+  if(yearSel.innerHTML.trim()===''){
+    yearSel.innerHTML=years.map(y=>`<option value="${y}"${y===curYear?' selected':''}>${y}</option>`).join('');
+  }
+
+  // Populate owner selector
+  if(ownerSel.children.length<=1){
+    ownerSel.innerHTML='<option value="">Todos responsáveis</option>'+owners.map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
+  }
+  const filterOwner=ownerSel.value;
+
+  // Filter tasks by year
+  const yearTasks=allCalTasks.filter(t=>(t.dateStart||t.date||'').startsWith(curYear));
+
+  // Group by owner
+  const ownerList=filterOwner?owners.filter(o=>o.id===filterOwner):owners.filter(o=>o.active!==false);
+  const content=$('agendas-ctrl-content');if(!content)return;
+
+  if(!ownerList.length){content.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3)">Nenhum responsável encontrado.</div>';return;}
+
+  let html='';
+  ownerList.forEach(owner=>{
+    const ownerTasks=yearTasks.filter(t=>t.ownerId===owner.id);
+    if(!ownerTasks.length&&filterOwner==='')return;
+
+    // Group by month
+    const byMonth={};
+    for(let m=0;m<12;m++) byMonth[m]=[];
+    ownerTasks.forEach(t=>{
+      const d=t.dateStart||t.date||'';
+      if(d){const m=+d.slice(5,7)-1;byMonth[m].push(t);}
+    });
+
+    // Get qtdAgendas from projects
+    const monthRows=MONTHS.map((mName,mi)=>{
+      const mTasks=byMonth[mi];
+      const realizadas=mTasks.filter(t=>t.status==='done').length;
+      const total=mTasks.length;
+      // Get contratadas from projects this owner has tasks in
+      const projIds=[...new Set(mTasks.map(t=>t.projId))];
+      const contratadas=projIds.reduce((sum,pid)=>{
+        const p=projects.find(x=>x.id===pid);
+        return sum+(p?.qtdAgendas||0);
+      },0);
+      if(total===0&&contratadas===0)return null;
+      const pct=total?Math.round(realizadas/total*100):0;
+      const color=pct>=100?'#3B6D11':pct>=50?'#BA7517':'#A32D2D';
+      return `<tr>
+        <td style="padding:6px 10px;font-size:12px;color:var(--text2)">${mName}</td>
+        <td style="padding:6px 10px;font-size:12px;text-align:center">${total}</td>
+        <td style="padding:6px 10px;font-size:12px;text-align:center;color:#185FA5;font-weight:500">${contratadas||'—'}</td>
+        <td style="padding:6px 10px;font-size:12px;text-align:center;color:#3B6D11;font-weight:500">${realizadas}</td>
+        <td style="padding:6px 10px;font-size:12px;text-align:center">
+          <span style="font-size:11px;font-weight:500;color:${color}">${total?pct+'%':'—'}</span>
+          ${total?`<div style="height:3px;background:var(--bg);border-radius:2px;margin-top:3px;width:60px;display:inline-block"><div style="height:100%;background:${color};width:${Math.min(pct,100)}%;border-radius:2px"></div></div>`:''}
+        </td>
+      </tr>`;
+    }).filter(Boolean);
+
+    if(!monthRows.length)return;
+
+    const totalTasks=ownerTasks.length;
+    const totalRealizadas=ownerTasks.filter(t=>t.status==='done').length;
+    html+=`<div class="card-table" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:0.5px solid var(--border)">
+        <div class="av" style="background:${owner.color||'#888'};color:#fff;font-size:10px;width:26px;height:26px">${owner.initials||'?'}</div>
+        <div style="font-size:13px;font-weight:500">${esc(owner.name)}</div>
+        <div style="margin-left:auto;font-size:11px;color:var(--text2)">${totalRealizadas} de ${totalTasks} agendas realizadas em ${curYear}</div>
+      </div>
+      <table style="width:100%">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:6px 10px;font-size:11px;text-align:left;font-weight:500;color:var(--text2)">Mês</th>
+          <th style="padding:6px 10px;font-size:11px;text-align:center;font-weight:500;color:var(--text2)">Agendadas</th>
+          <th style="padding:6px 10px;font-size:11px;text-align:center;font-weight:500;color:#185FA5">Contratadas</th>
+          <th style="padding:6px 10px;font-size:11px;text-align:center;font-weight:500;color:#3B6D11">Realizadas</th>
+          <th style="padding:6px 10px;font-size:11px;text-align:center;font-weight:500;color:var(--text2)">% Realizado</th>
+        </tr></thead>
+        <tbody>${monthRows.join('')}</tbody>
+      </table>
+    </div>`;
+  });
+
+  content.innerHTML=html||'<div style="padding:20px;text-align:center;color:var(--text3)">Nenhuma agenda encontrada para o período.</div>';
+}
+
 function goPage(p){
   closeModal(); // Ajuste 4: fecha qualquer modal aberto ao navegar
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
@@ -1845,6 +1960,7 @@ function goPage(p){
   if(p==='templates')renderTemplates();
   if(p==='users')    renderUsersTable();
   if(p==='ausencias')renderAusenciasTable();
+  if(p==='agendas-ctrl'){loadAllTasksForCal().then(renderAgendasCtrl);}
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}

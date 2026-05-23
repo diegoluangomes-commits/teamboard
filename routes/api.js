@@ -99,7 +99,8 @@ const toProject = r => r ? ({
   id: r.id, name: r.name, color: r.color, desc: r.descr,
   clientId: r.client_id, productId: r.product_id,
   sellerId: r.seller_id, ownerId: r.owner_id,
-  dateStart: r.date_start||'', dateEnd: r.date_end||''
+  dateStart: r.date_start||'', dateEnd: r.date_end||'',
+  qtdAgendas: r.qtd_agendas||0
 }) : null;
 
 const toTask = r => r ? ({
@@ -231,20 +232,20 @@ router.get('/projects', async (req, res) => {
 });
 
 router.post('/projects', async (req, res) => {
-  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd } = req.body;
+  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas } = req.body;
   const id = uuidv4();
   const { rows } = await q(
-    'INSERT INTO projects (id,name,color,descr,client_id,product_id,seller_id,owner_id,date_start,date_end) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
-    [id, name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null]
+    'INSERT INTO projects (id,name,color,descr,client_id,product_id,seller_id,owner_id,date_start,date_end,qtd_agendas) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+    [id, name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null, qtdAgendas||0]
   );
   send(res, toProject(rows[0]));
 });
 
 router.put('/projects/:id', async (req, res) => {
-  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd } = req.body;
+  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas } = req.body;
   const { rows } = await q(
-    'UPDATE projects SET name=$1,color=$2,descr=$3,client_id=$4,product_id=$5,seller_id=$6,owner_id=$7,date_start=$8,date_end=$9 WHERE id=$10 RETURNING *',
-    [name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null, req.params.id]
+    'UPDATE projects SET name=$1,color=$2,descr=$3,client_id=$4,product_id=$5,seller_id=$6,owner_id=$7,date_start=$8,date_end=$9,qtd_agendas=$10 WHERE id=$11 RETURNING *',
+    [name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null, qtdAgendas||0, req.params.id]
   );
   if (!rows.length) return notFound(res,'Projeto');
   send(res, toProject(rows[0]));

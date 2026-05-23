@@ -91,6 +91,10 @@
       <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="11" height="10" rx="1.5"/><line x1="4" y1="1" x2="4" y2="3.5"/><line x1="9" y1="1" x2="9" y2="3.5"/><line x1="1" y1="5.5" x2="12" y2="5.5"/><line x1="4" y1="8" x2="9" y2="8"/></svg>
       Ausências
     </div>
+    <div class="ni" id="ni-agendas-ctrl" onclick="goPage('agendas-ctrl')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="11" height="10" rx="1.5"/><line x1="4" y1="1" x2="4" y2="3.5"/><line x1="9" y1="1" x2="9" y2="3.5"/><line x1="1" y1="5.5" x2="12" y2="5.5"/><polyline points="3,9 5,11 10,7"/></svg>
+      Controle de Agendas
+    </div>
     <div class="ns" style="margin-top:4px">Projetos</div>
     <div style="padding:4px 10px 4px">
       <div style="position:relative;display:flex;align-items:center">
@@ -343,6 +347,20 @@
     <button onclick="doLogin()" style="width:100%;padding:10px;background:#185FA5;color:#B5D4F4;border:none;border-radius:var(--r-md);font-size:13px;font-weight:500;cursor:pointer">Entrar</button>
   </div>
 </div>
+
+    <!-- Controle de Agendas -->
+    <div class="page" id="page-agendas-ctrl">
+      <div class="ph">
+        <div class="ptitle">Controle de Agendas</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="ag-filter-owner" onchange="renderAgendasCtrl()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
+            <option value="">Todos responsáveis</option>
+          </select>
+          <select id="ag-filter-year" onchange="renderAgendasCtrl()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)"></select>
+        </div>
+      </div>
+      <div id="agendas-ctrl-content" style="padding:4px 0"></div>
+    </div>
 
 <script src="/js/app.js"></script>
 </body>
