@@ -1991,10 +1991,10 @@ function renderAgendasCtrl(){
     if(!html) html='<div style="padding:20px;text-align:center;color:var(--text3)">Nenhum projeto com agendas encontrado.</div>';
   }
 
+  const _c=document.querySelector('.content');
+  if(_c){_c.style.overflow='hidden';_c.scrollTop=0;}
   content.innerHTML=html;
-  document.querySelector('.content')?.scrollTo(0,0);
-  setTimeout(()=>document.querySelector('.content')?.scrollTo(0,0), 50);
-  setTimeout(()=>document.querySelector('.content')?.scrollTo(0,0), 200);
+  if(_c){_c.scrollTop=0;setTimeout(()=>{_c.scrollTop=0;_c.style.overflow='auto';},50);}
 }
 
 function switchAgTab(tab){
