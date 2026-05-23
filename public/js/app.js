@@ -1889,6 +1889,10 @@ function renderAgendasCtrl(){
 
   const yearTasks=allCalTasks.filter(t=>(t.dateStart||t.date||'').startsWith(curYear));
 
+  // ── Filtro de mês ──
+  const monthSel=$('ag-filter-month');
+  const filterMonth=monthSel?.value!==''&&monthSel?.value!=null?+monthSel.value:-1;
+
   // ── Decide qual aba renderizar ──
   const currentTab=document.querySelector('.ag-tab.ag-tab-act')?.dataset?.tab||'owner';
 
@@ -1902,6 +1906,7 @@ function renderAgendasCtrl(){
       const byMonth={};for(let m=0;m<12;m++)byMonth[m]=[];
       ownerTasks.forEach(t=>{const d=t.dateStart||t.date||'';if(d){const m=+d.slice(5,7)-1;byMonth[m].push(t);}});
       const monthRows=MONTHS.map((mName,mi)=>{
+        if(filterMonth>=0&&mi!==filterMonth)return null;
         const mTasks=byMonth[mi];if(!mTasks.length)return null;
         const realizadas=mTasks.filter(t=>t.status==='done').length;
         const total=mTasks.length;
@@ -2021,6 +2026,7 @@ function goPage(p){
     const ownerSel=$('ag-filter-owner');if(ownerSel)ownerSel.innerHTML='';
     const projSel=$('ag-filter-proj');if(projSel)projSel.innerHTML='';
     switchAgTab('owner');
+    document.querySelector('.content')?.scrollTo(0,0);
   });}
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
