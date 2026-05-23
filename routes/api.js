@@ -1,6 +1,7 @@
 const express  = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { pool }  = require('../db');
+const nodemailer = require('nodemailer');  // ← linha 4
 const router    = express.Router();
 
 const send     = (res, data) => res.json(data);
