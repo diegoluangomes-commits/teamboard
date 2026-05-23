@@ -2029,6 +2029,9 @@ function goPage(p){
     const ownerSel=$('ag-filter-owner');if(ownerSel)ownerSel.innerHTML='';
     const projSel=$('ag-filter-proj');if(projSel)projSel.innerHTML='';
     switchAgTab('owner');
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      document.querySelector('.content')?.scrollTo(0,0);
+    }));
   });}
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
