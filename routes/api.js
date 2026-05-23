@@ -536,16 +536,14 @@ console.log(`[Notify] Iniciando envio para: ${email}`);
 console.log(`[Notify] SMTP_USER: ${process.env.SMTP_USER}`);
 console.log(`[Notify] SMTP_HOST: ${process.env.SMTP_HOST}`);
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  host: process.env.SMTP_HOST,
+  port: +process.env.SMTP_PORT || 587,
+  secure: process.env.SMTP_SECURE === 'true',
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
-  },
-  tls: { rejectUnauthorized: false }
-});
-await transporter.sendMail({
+  }
+});await transporter.sendMail({
   from: `"TeamSolidez" <${process.env.SMTP_USER}>`,
   to: email,
   subject,
