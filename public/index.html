@@ -356,8 +356,21 @@
           <select id="ag-filter-owner" onchange="renderAgendasCtrl()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
             <option value="">Todos responsáveis</option>
           </select>
+          <select id="ag-filter-proj" onchange="renderAgendasCtrl()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);display:none">
+            <option value="">Todos projetos</option>
+          </select>
           <select id="ag-filter-year" onchange="renderAgendasCtrl()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)"></select>
         </div>
+      </div>
+      <div style="display:flex;gap:0;border-bottom:0.5px solid var(--border);margin-bottom:12px;padding:0 2px">
+        <button class="ag-tab ag-tab-act" data-tab="owner" onclick="switchAgTab('owner')"
+          style="padding:8px 16px;font-size:12px;background:none;border:none;border-bottom:2px solid #185FA5;color:#185FA5;font-weight:500;cursor:pointer">
+          Por Responsável
+        </button>
+        <button class="ag-tab" data-tab="proj" onclick="switchAgTab('proj')"
+          style="padding:8px 16px;font-size:12px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;cursor:pointer">
+          Por Projeto
+        </button>
       </div>
       <div id="agendas-ctrl-content" style="padding:4px 0"></div>
     </div>
