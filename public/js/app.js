@@ -2027,13 +2027,9 @@ function goPage(p){
     const projSel=$('ag-filter-proj');if(projSel)projSel.innerHTML='';
     switchAgTab('owner');
     setTimeout(()=>{
-      window.scrollTo({top:0,behavior:'instant'});
-      document.body.scrollTop=0;
-      document.documentElement.scrollTop=0;
-      document.querySelectorAll('*').forEach(el=>{
-        if(el.scrollTop>0)el.scrollTop=0;
-      });
-    },100);
+      document.querySelector('.content')?.scrollTo(0,0);
+      document.querySelector('.sidebar')?.scrollTo(0,0);
+    },150);
   });}
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
