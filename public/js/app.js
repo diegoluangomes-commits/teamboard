@@ -2026,7 +2026,10 @@ function goPage(p){
     const ownerSel=$('ag-filter-owner');if(ownerSel)ownerSel.innerHTML='';
     const projSel=$('ag-filter-proj');if(projSel)projSel.innerHTML='';
     switchAgTab('owner');
+    window.scrollTo(0,0);
     document.querySelector('.content')?.scrollTo(0,0);
+    document.querySelector('.main-layout')?.scrollTo(0,0);
+    document.documentElement.scrollTop=0;
   });}
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
