@@ -1993,6 +1993,8 @@ function renderAgendasCtrl(){
 
   content.innerHTML=html;
   document.querySelector('.content')?.scrollTo(0,0);
+  setTimeout(()=>document.querySelector('.content')?.scrollTo(0,0), 50);
+  setTimeout(()=>document.querySelector('.content')?.scrollTo(0,0), 200);
 }
 
 function switchAgTab(tab){
@@ -2025,15 +2027,18 @@ function goPage(p){
   if(p==='templates')renderTemplates();
   if(p==='users')    renderUsersTable();
   if(p==='ausencias')renderAusenciasTable();
-  if(p==='agendas-ctrl'){loadAllTasksForCal().then(()=>{
-    const yearSel=$('ag-filter-year');if(yearSel)yearSel.innerHTML='';
-    const ownerSel=$('ag-filter-owner');if(ownerSel)ownerSel.innerHTML='';
-    const projSel=$('ag-filter-proj');if(projSel)projSel.innerHTML='';
-    switchAgTab('owner');
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      document.querySelector('.content')?.scrollTo(0,0);
-    }));
-  });}
+  if(p==='agendas-ctrl'){
+    // Mostra loading imediatamente
+    const ct=$('agendas-ctrl-content');
+    if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">⏳ Carregando agendas...</div>';
+    document.querySelector('.content')?.scrollTo(0,0);
+    loadAllTasksForCal().then(()=>{
+      const yearSel=$('ag-filter-year');if(yearSel)yearSel.innerHTML='';
+      const ownerSel=$('ag-filter-owner');if(ownerSel)ownerSel.innerHTML='';
+      const projSel=$('ag-filter-proj');if(projSel)projSel.innerHTML='';
+      switchAgTab('owner');
+    });
+  }
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
