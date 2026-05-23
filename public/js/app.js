@@ -1992,6 +1992,7 @@ function renderAgendasCtrl(){
   }
 
   content.innerHTML=html;
+  document.querySelector('.content')?.scrollTo(0,0);
 }
 
 function switchAgTab(tab){
