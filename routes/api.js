@@ -545,9 +545,6 @@ const transporter = nodemailer.createTransport({
   },
   tls: { rejectUnauthorized: false }
 });
-console.log(`[Notify] Verificando conexão SMTP...`);
-await transporter.verify();
-console.log(`[Notify] Conexão OK! Enviando email...`);
 await transporter.sendMail({
   from: `"TeamSolidez" <${process.env.SMTP_USER}>`,
   to: email,
