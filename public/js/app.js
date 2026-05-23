@@ -1061,7 +1061,9 @@ function sortClients(col){
 
 function renderClientsTable(){
   const tb=$('clients-tb');if(!tb)return;
-  const sorted=clients.slice().sort((a,b)=>{
+  const search=($('client-search')?.value||'').toLowerCase().trim();
+  const filtered=search?clients.filter(c=>(c.name||'').toLowerCase().includes(search)):clients;
+  const sorted=filtered.slice().sort((a,b)=>{
     let va='',vb='';
     if(clientSort.col==='name'){va=a.name||'';vb=b.name||'';}
     else if(clientSort.col==='classification'){va=a.classification||'';vb=b.classification||'';}
