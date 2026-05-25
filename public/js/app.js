@@ -2154,22 +2154,34 @@ function goPage(p){
   if(p==='users')    renderUsersTable();
   if(p==='ausencias')renderAusenciasTable();
   if(p==='agendas-proj'){
-    const ct=$('agendas-proj-content');
-    if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
-    loadAllTasksForCal().then(()=>{
+    if(allCalTasks.length){
       const ys=$('agp-filter-year');if(ys)ys.innerHTML='';
       const ps=$('agp-filter-proj');if(ps)ps.innerHTML='';
       renderAgendasProj();
-    });
+    } else {
+      const ct=$('agendas-proj-content');
+      if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
+      loadAllTasksForCal().then(()=>{
+        const ys=$('agp-filter-year');if(ys)ys.innerHTML='';
+        const ps=$('agp-filter-proj');if(ps)ps.innerHTML='';
+        renderAgendasProj();
+      });
+    }
   }
   if(p==='agendas-owner'){
-    const ct=$('agendas-owner-content');
-    if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
-    loadAllTasksForCal().then(()=>{
+    if(allCalTasks.length){
       const ys=$('ago-filter-year');if(ys)ys.innerHTML='';
       const os=$('ago-filter-owner');if(os)os.innerHTML='';
       renderAgendasOwner();
-    });
+    } else {
+      const ct=$('agendas-owner-content');
+      if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
+      loadAllTasksForCal().then(()=>{
+        const ys=$('ago-filter-year');if(ys)ys.innerHTML='';
+        const os=$('ago-filter-owner');if(os)os.innerHTML='';
+        renderAgendasOwner();
+      });
+    }
   }
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
