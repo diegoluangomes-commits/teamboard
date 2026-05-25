@@ -2290,14 +2290,14 @@ function goPage(p){
   document.getElementById('page-'+p)?.classList.add('active');
   document.getElementById('ni-'+p)?.classList.add('act');
   // Reseta scroll ao trocar de página
-  document.querySelector('.content')?.scrollTo(0,0);
-  document.querySelector('.sidebar')?.scrollTo(0,0);
-  // Para páginas de agendas reseta o body também
-  if(p==='agendas-proj'||p==='agendas-owner'){
+  const resetScroll=()=>{
+    const c=document.querySelector('.content');
+    if(c)c.scrollTop=0;
     window.scrollTo(0,0);
     document.documentElement.scrollTop=0;
     document.body.scrollTop=0;
-  }
+  };
+  resetScroll();
   if(p==='clients')  renderClientsTable();
   if(p==='products') renderProductsTable();
   if(p==='owners')   renderOwnersTable();
@@ -2310,6 +2310,7 @@ function goPage(p){
       const as=$('adash-ano');if(as)as.innerHTML='';
       const ms=$('adash-mes');if(ms)ms._defaultSet=false;
       renderAgendaDash();
+      setTimeout(resetScroll,0);
     } else {
       const ct=$('agenda-dash-content');
       if(ct)ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
@@ -2317,7 +2318,7 @@ function goPage(p){
         const as=$('adash-ano');if(as)as.innerHTML='';
         const ms=$('adash-mes');if(ms)ms._defaultSet=false;
         renderAgendaDash();
-        document.querySelector('.content')?.scrollTo(0,0);
+        setTimeout(resetScroll,0);
       });
     }
   }
