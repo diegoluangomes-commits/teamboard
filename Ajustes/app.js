@@ -2143,9 +2143,15 @@ function goPage(p){
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('act'));
   document.getElementById('page-'+p)?.classList.add('active');
   document.getElementById('ni-'+p)?.classList.add('act');
-  // Sempre rola conteúdo e sidebar para o topo ao trocar de página
+  // Reseta scroll ao trocar de página
   document.querySelector('.content')?.scrollTo(0,0);
   document.querySelector('.sidebar')?.scrollTo(0,0);
+  // Para páginas de agendas reseta o body também
+  if(p==='agendas-proj'||p==='agendas-owner'){
+    window.scrollTo(0,0);
+    document.documentElement.scrollTop=0;
+    document.body.scrollTop=0;
+  }
   if(p==='clients')  renderClientsTable();
   if(p==='products') renderProductsTable();
   if(p==='owners')   renderOwnersTable();
@@ -2154,22 +2160,36 @@ function goPage(p){
   if(p==='users')    renderUsersTable();
   if(p==='ausencias')renderAusenciasTable();
   if(p==='agendas-proj'){
-    const ct=$('agendas-proj-content');
-    if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
-    loadAllTasksForCal().then(()=>{
+    if(allCalTasks.length){
       const ys=$('agp-filter-year');if(ys)ys.innerHTML='';
       const ps=$('agp-filter-proj');if(ps)ps.innerHTML='';
       renderAgendasProj();
-    });
+    } else {
+      const ct=$('agendas-proj-content');
+      if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
+      loadAllTasksForCal().then(()=>{
+        const ys=$('agp-filter-year');if(ys)ys.innerHTML='';
+        const ps=$('agp-filter-proj');if(ps)ps.innerHTML='';
+        renderAgendasProj();
+        window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;document.querySelector('.content')?.scrollTo(0,0);
+      });
+    }
   }
   if(p==='agendas-owner'){
-    const ct=$('agendas-owner-content');
-    if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
-    loadAllTasksForCal().then(()=>{
+    if(allCalTasks.length){
       const ys=$('ago-filter-year');if(ys)ys.innerHTML='';
       const os=$('ago-filter-owner');if(os)os.innerHTML='';
       renderAgendasOwner();
-    });
+    } else {
+      const ct=$('agendas-owner-content');
+      if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
+      loadAllTasksForCal().then(()=>{
+        const ys=$('ago-filter-year');if(ys)ys.innerHTML='';
+        const os=$('ago-filter-owner');if(os)os.innerHTML='';
+        renderAgendasOwner();
+        window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;document.querySelector('.content')?.scrollTo(0,0);
+      });
+    }
   }
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}

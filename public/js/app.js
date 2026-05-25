@@ -2143,9 +2143,15 @@ function goPage(p){
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('act'));
   document.getElementById('page-'+p)?.classList.add('active');
   document.getElementById('ni-'+p)?.classList.add('act');
-  // Sempre rola conteúdo e sidebar para o topo ao trocar de página
+  // Reseta scroll ao trocar de página
   document.querySelector('.content')?.scrollTo(0,0);
   document.querySelector('.sidebar')?.scrollTo(0,0);
+  // Para páginas de agendas reseta o body também
+  if(p==='agendas-proj'||p==='agendas-owner'){
+    window.scrollTo(0,0);
+    document.documentElement.scrollTop=0;
+    document.body.scrollTop=0;
+  }
   if(p==='clients')  renderClientsTable();
   if(p==='products') renderProductsTable();
   if(p==='owners')   renderOwnersTable();
@@ -2165,6 +2171,7 @@ function goPage(p){
         const ys=$('agp-filter-year');if(ys)ys.innerHTML='';
         const ps=$('agp-filter-proj');if(ps)ps.innerHTML='';
         renderAgendasProj();
+        window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;document.querySelector('.content')?.scrollTo(0,0);
       });
     }
   }
@@ -2180,6 +2187,7 @@ function goPage(p){
         const ys=$('ago-filter-year');if(ys)ys.innerHTML='';
         const os=$('ago-filter-owner');if(os)os.innerHTML='';
         renderAgendasOwner();
+        window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;document.querySelector('.content')?.scrollTo(0,0);
       });
     }
   }
