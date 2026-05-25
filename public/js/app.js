@@ -1621,14 +1621,14 @@ function calRenderDayList(ft, day){
     const ownerColor=o.color||'#888';
     const turnoIcon=t.turno==='tarde'?'🌙':'☀️';
     const turnoLabel=t.turno==='tarde'?'Tarde':'Manhã';
-    return `<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);transition:background .1s;${t.status==='done'?'opacity:.75':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+    return `<div data-task-id="${t.id}" style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);transition:background .1s;${t.status==='done'?'opacity:.75':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
       <div style="width:3px;height:40px;border-radius:2px;background:${ownerColor};flex-shrink:0"></div>
-      <div onclick="event.stopPropagation();toggleDoneCalTask('${t.id}')" title="${t.status==='done'?'Marcar como pendente':'Marcar como realizado'}"
+      <div id="cal-check-${t.id}" onclick="event.stopPropagation();toggleDoneCalTask('${t.id}')" title="${t.status==='done'?'Marcar como pendente':'Marcar como realizado'}"
         style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${t.status==='done'?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${t.status==='done'?'#3B6D11':'transparent'};flex-shrink:0">
         ${t.status==='done'?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
       </div>
       <div style="flex:1;min-width:0;cursor:pointer" onclick="openEditTask('${t.id}')">
-        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${t.status==='done'?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</div>
+        <div data-task-name="${t.id}" style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${t.status==='done'?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:6px">
           <span>${esc(proj.name||'')}</span>
           ${cli.name?`<span style="background:#EEEDFE;color:#3C3489;padding:0 4px;border-radius:3px;font-size:10px">${esc(cli.name)}</span>`:''}
@@ -1637,7 +1637,7 @@ function calRenderDayList(ft, day){
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
         <span style="font-size:11px;background:${t.turno==='tarde'?'#E6F1FB':'#FAEEDA'};color:${t.turno==='tarde'?'#0C447C':'#854F0B'};padding:2px 7px;border-radius:8px;font-weight:500">${turnoIcon} ${turnoLabel}</span>
-        <span class="pill ${SM[t.status].c}" style="font-size:10px">${SM[t.status].l}</span>
+        <span id="cal-pill-${t.id}" class="pill ${SM[t.status].c}" style="font-size:10px">${SM[t.status].l}</span>
         <span style="font-size:11px;color:var(--text2)">${periodo}</span>
         <div class="av" style="background:${ownerColor};color:#fff;font-size:9px;width:24px;height:24px" title="${esc(o.name||'')}">${o.initials||'?'}</div>
       </div>
@@ -1656,13 +1656,26 @@ async function toggleDoneCalTask(id){
   const t=allCalTasks.find(x=>x.id===id)||tasks.find(x=>x.id===id);
   if(!t)return;
   const newStatus=t.status==='done'?'pending':'done';
+  const isDone=newStatus==='done';
+  // Atualiza arrays
   await api('PUT','/tasks/'+id,{...t,status:newStatus});
-  // Atualiza nos dois arrays
   if(allCalTasks.find(x=>x.id===id)) allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:newStatus}:x);
   if(tasks.find(x=>x.id===id)) tasks=tasks.map(x=>x.id===id?{...x,status:newStatus}:x);
-  // Atualiza só a lista de tarefas (mantém dia selecionado), sem re-renderizar o grid inteiro
-  calRenderDayList(calFilteredTasks(), calSelectedDay);
-  showToast(newStatus==='done'?'✅ Agenda marcada como realizada!':'↩️ Agenda desmarcada','success');
+  // Atualiza APENAS o elemento clicado no DOM — sem re-renderizar a lista inteira
+  const chk=document.getElementById('cal-check-'+id);
+  if(chk){
+    chk.style.borderColor=isDone?'#3B6D11':'#ccc';
+    chk.style.background=isDone?'#3B6D11':'transparent';
+    chk.title=isDone?'Marcar como pendente':'Marcar como realizado';
+    chk.innerHTML=isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':'';
+    const row=chk.closest('[data-task-id]');
+    if(row) row.style.opacity=isDone?'.75':'1';
+    const name=document.querySelector(`[data-task-name="${id}"]`);
+    if(name){ name.style.textDecoration=isDone?'line-through':'none'; name.style.color=isDone?'var(--text3)':''; }
+    const pill=document.getElementById('cal-pill-'+id);
+    if(pill){ pill.className='pill '+(isDone?SM['done'].c:SM['pending'].c); pill.textContent=isDone?SM['done'].l:SM['pending'].l; }
+  }
+  showToast(isDone?'✅ Agenda marcada como realizada!':'↩️ Agenda desmarcada','success');
 }
 
 // ── Users ──────────────────────────────────────────────────
