@@ -2394,13 +2394,13 @@ function goPage(p){
     document.body.scrollTop=0;
   };
   resetScroll();
-  if(p==='clients')  renderClientsTable();
-  if(p==='products') renderProductsTable();
-  if(p==='owners')   renderOwnersTable();
-  if(p==='sellers')  renderSellersTable();
-  if(p==='templates')renderTemplates();
-  if(p==='users')    renderUsersTable();
-  if(p==='ausencias')renderAusenciasTable();
+  if(p==='clients')  { renderClientsTable();   setTimeout(resetScroll,0); }
+  if(p==='products') { renderProductsTable();  setTimeout(resetScroll,0); }
+  if(p==='owners')   { renderOwnersTable();    setTimeout(resetScroll,0); }
+  if(p==='sellers')  { renderSellersTable();   setTimeout(resetScroll,0); }
+  if(p==='templates'){ renderTemplates();      setTimeout(resetScroll,0); }
+  if(p==='users')    { renderUsersTable();     setTimeout(resetScroll,0); }
+  if(p==='ausencias'){ renderAusenciasTable(); setTimeout(resetScroll,0); }
   if(p==='agenda-dash'){
     if(allCalTasks.length){
       const as=$('adash-ano');if(as)as.innerHTML='';
@@ -2424,6 +2424,7 @@ function goPage(p){
   if(p==='relatorios'){
     if(!allCalTasks.length) loadAllTasksForCal();
     initRelatorios();
+    setTimeout(resetScroll,0);
   }
 }
 function switchView(v,el){
