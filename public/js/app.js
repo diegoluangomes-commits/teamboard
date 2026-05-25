@@ -2421,6 +2421,10 @@ function goPage(p){
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
+  if(p==='relatorios'){
+    if(!allCalTasks.length) loadAllTasksForCal();
+    initRelatorios();
+  }
 }
 function switchView(v,el){
   document.querySelectorAll('.vt').forEach(t=>t.classList.remove('act'));el.classList.add('act');
@@ -2428,7 +2432,302 @@ function switchView(v,el){
   $('view-kan').style.display=v==='kan'?'block':'none';
 }
 
-// ── Export CSV ─────────────────────────────────────────────
+// ── Relatórios ─────────────────────────────────────────────
+const MESES_REL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function initRelatorios(){
+  // Popula anos e selects de todos os relatórios
+  const thisYear=new Date().getFullYear();
+  const years=[...new Set([
+    ...(allCalTasks.length?allCalTasks:tasks).map(t=>(t.dateStart||t.date||'').slice(0,4)).filter(Boolean),
+    ...tasks.map(t=>(t.date||'').slice(0,4)).filter(Boolean)
+  ])].filter(Boolean).sort().reverse();
+  if(!years.includes(String(thisYear))) years.unshift(String(thisYear));
+
+  [1,2,3,4].forEach(n=>{
+    const anoSel=$(`rel${n}-ano`);
+    if(anoSel){
+      anoSel.innerHTML=years.map(y=>`<option value="${y}"${y===String(thisYear)?' selected':''}>${y}</option>`).join('');
+    }
+    const mesSel=$(`rel${n}-mes`);
+    if(mesSel) mesSel.value=String(new Date().getMonth());
+  });
+
+  // Owners
+  const ownerOpts='<option value="">Todos</option>'+owners.filter(o=>o.active!==false).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
+  ['rel1-owner','rel2-owner','rel4-owner'].forEach(id=>{ const s=$(id); if(s) s.innerHTML=ownerOpts; });
+
+  // Projetos
+  const projOpts='<option value="">Todos</option>'+projects.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  ['rel1-proj','rel3-proj','rel4-proj'].forEach(id=>{ const s=$(id); if(s) s.innerHTML=projOpts; });
+}
+
+// Utilitários SheetJS
+function xlsxDownload(wb, filename){
+  if(!window.XLSX){ showToast('❌ Biblioteca Excel não carregada','error'); return; }
+  window.XLSX.writeFile(wb, filename);
+}
+function xlsxWB(){ return window.XLSX.utils.book_new(); }
+function xlsxSheet(data){ return window.XLSX.utils.aoa_to_sheet(data); }
+function xlsxAppend(wb,ws,name){ window.XLSX.utils.book_append_sheet(wb,ws,name); }
+
+function relPeriodFilter(t, mesSel, anoSel, dateField){
+  const dateRef=t[dateField]||t.dateStart||t.date||'';
+  if(!dateRef) return false;
+  const [y,m]=dateRef.split('-');
+  const ano=anoSel?.value||'';
+  const mes=mesSel?.value;
+  if(ano && y!==ano) return false;
+  if(mes!==''&&mes!=null && +m-1!==+mes) return false;
+  return true;
+}
+
+// ── Rel 1: Tarefas por Status ──────────────────────────────
+async function exportRel1(){
+  const mesSel=$('rel1-mes'), anoSel=$('rel1-ano');
+  const filterOwner=$('rel1-owner')?.value||'';
+  const filterProj=$('rel1-proj')?.value||'';
+  // Garante tasks carregadas
+  const src=tasks.length?tasks:(await api('GET','/tasks'));
+
+  const filtered=src.filter(t=>{
+    if(filterOwner && t.ownerId!==filterOwner) return false;
+    if(filterProj && t.projId!==filterProj) return false;
+    return relPeriodFilter(t, mesSel, anoSel, 'date');
+  });
+
+  if(!filtered.length){ showToast('Nenhuma tarefa encontrada para o filtro','error'); return; }
+
+  const header=['Tarefa','Status','Grupo','Responsável','Prioridade','Prazo','Data Início','Data Fim','Projeto','Cliente','Turno'];
+  const rows=filtered.map(t=>{
+    const proj=projects.find(p=>p.id===t.projId)||{};
+    const cli=clientById(proj.clientId);
+    return [
+      t.name,
+      SM[t.status]?.l||t.status,
+      GROUPS[t.group]?.name||'',
+      ownerById(t.ownerId)?.name||'',
+      PM[t.priority]?.l||t.priority||'',
+      fd(t.date)||'',
+      fd(t.dateStart)||'',
+      fd(t.dateEnd)||'',
+      proj.name||'',
+      cli?.name||'',
+      t.turno==='tarde'?'Tarde':'Manhã'
+    ];
+  });
+
+  const wb=xlsxWB();
+  xlsxAppend(wb, xlsxSheet([header,...rows]), 'Tarefas');
+  const mesLabel=mesSel?.value!==''?MESES_REL[+mesSel.value]:'Todos';
+  xlsxDownload(wb, `tarefas_status_${mesLabel}_${anoSel?.value||'geral'}.xlsx`);
+  showToast('✅ Relatório exportado!','success');
+}
+
+// ── Rel 2: Agendas por Responsável ────────────────────────
+async function exportRel2(){
+  const mesSel=$('rel2-mes'), anoSel=$('rel2-ano');
+  const filterOwner=$('rel2-owner')?.value||'';
+  const ano=anoSel?.value||String(new Date().getFullYear());
+  const mes=mesSel?.value;
+
+  if(!allCalTasks.length) await loadAllTasksForCal();
+
+  // Carrega status diários do período
+  const monthStr=mes!==''&&mes!=null?`${ano}-${String(+mes+1).padStart(2,'0')}`:null;
+  if(monthStr) await loadDailyStatusForMonth(+ano, +mes);
+
+  const agendas=allCalTasks.filter(t=>{
+    if(filterOwner && t.ownerId!==filterOwner) return false;
+    return relPeriodFilter(t, mesSel, anoSel, 'dateStart');
+  });
+
+  if(!agendas.length){ showToast('Nenhuma agenda encontrada para o filtro','error'); return; }
+
+  const wb=xlsxWB();
+  const ownerList=filterOwner
+    ?owners.filter(o=>o.id===filterOwner)
+    :owners.filter(o=>o.active!==false&&agendas.some(t=>t.ownerId===o.id));
+
+  ownerList.forEach(owner=>{
+    const ownerTasks=agendas.filter(t=>t.ownerId===owner.id);
+    if(!ownerTasks.length) return;
+
+    const header=['Tarefa','Projeto','Cliente','Data Início','Data Fim','Dia','Status do Dia','Turno'];
+    const rows=[];
+    ownerTasks.forEach(t=>{
+      const proj=projects.find(p=>p.id===t.projId)||{};
+      const cli=clientById(proj.clientId);
+      const isPeriod=hasPeriod(t);
+      if(isPeriod){
+        // Expande cada dia do período
+        const start=new Date(t.dateStart+'T00:00:00');
+        const end=new Date(t.dateEnd+'T00:00:00');
+        for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
+          const dateStr=d.toISOString().slice(0,10);
+          const dow=d.getDay();
+          if(dow===0||dow===6) continue; // pula fim de semana
+          const ds=getDailyStatus(t.id, dateStr)||'pending';
+          rows.push([t.name, proj.name||'', cli?.name||'', fd(t.dateStart), fd(t.dateEnd), fd(dateStr), SM[ds]?.l||ds, t.turno==='tarde'?'Tarde':'Manhã']);
+        }
+      } else {
+        rows.push([t.name, proj.name||'', cli?.name||'', fd(t.dateStart||t.date), '', fd(t.dateStart||t.date), SM[t.status]?.l||t.status, t.turno==='tarde'?'Tarde':'Manhã']);
+      }
+    });
+    if(rows.length){
+      const sheetName=(owner.initials||owner.name||'Owner').slice(0,28);
+      xlsxAppend(wb, xlsxSheet([header,...rows]), sheetName);
+    }
+  });
+
+  if(!wb.SheetNames?.length){ showToast('Nenhum dado para exportar','error'); return; }
+  const mesLabel=mes!==''&&mes!=null?MESES_REL[+mes]:'Todos';
+  xlsxDownload(wb, `agendas_responsavel_${mesLabel}_${ano}.xlsx`);
+  showToast('✅ Relatório exportado!','success');
+}
+
+// ── Rel 3: Agendas por Projeto (contratadas x realizadas) ─
+async function exportRel3(){
+  const mesSel=$('rel3-mes'), anoSel=$('rel3-ano');
+  const filterProj=$('rel3-proj')?.value||'';
+  const ano=anoSel?.value||String(new Date().getFullYear());
+  const mes=mesSel?.value;
+
+  if(!allCalTasks.length) await loadAllTasksForCal();
+  const monthStr=mes!==''&&mes!=null?`${ano}-${String(+mes+1).padStart(2,'0')}`:null;
+  if(monthStr) await loadDailyStatusForMonth(+ano, +mes);
+
+  const agendas=allCalTasks.filter(t=>{
+    if(filterProj && t.projId!==filterProj) return false;
+    return relPeriodFilter(t, mesSel, anoSel, 'dateStart');
+  });
+
+  const projList=filterProj
+    ?projects.filter(p=>p.id===filterProj)
+    :projects.filter(p=>agendas.some(t=>t.projId===p.id)||p.qtdAgendas>0);
+
+  if(!projList.length){ showToast('Nenhum projeto encontrado para o filtro','error'); return; }
+
+  // Aba resumo
+  const headerRes=['Projeto','Cliente','Contratadas','Agendadas','Realizadas','Pendentes','% Realizado'];
+  const rowsRes=projList.map(proj=>{
+    const cli=clientById(proj.clientId);
+    const pTasks=agendas.filter(t=>t.projId===proj.id);
+    let realizadas=0;
+    pTasks.forEach(t=>{
+      if(hasPeriod(t)){
+        const start=new Date(t.dateStart+'T00:00:00');
+        const end=new Date(t.dateEnd+'T00:00:00');
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+          const dow=d.getDay(); if(dow===0||dow===6) continue;
+          const dateStr=d.toISOString().slice(0,10);
+          if(getDailyStatus(t.id,dateStr)==='done') realizadas++;
+        }
+      } else {
+        if(t.status==='done') realizadas++;
+      }
+    });
+    const contratadas=proj.qtdAgendas||0;
+    const agendadas=pTasks.length;
+    const pendentes=agendadas-realizadas;
+    const pct=agendadas>0?Math.round(realizadas/agendadas*100):0;
+    return [proj.name||'', cli?.name||'', contratadas, agendadas, realizadas, pendentes, pct+'%'];
+  });
+
+  // Aba detalhes
+  const headerDet=['Projeto','Cliente','Tarefa','Responsável','Data Início','Data Fim','Dia','Status do Dia','Turno'];
+  const rowsDet=[];
+  projList.forEach(proj=>{
+    const cli=clientById(proj.clientId);
+    const pTasks=agendas.filter(t=>t.projId===proj.id);
+    pTasks.forEach(t=>{
+      const owner=ownerById(t.ownerId);
+      if(hasPeriod(t)){
+        const start=new Date(t.dateStart+'T00:00:00');
+        const end=new Date(t.dateEnd+'T00:00:00');
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+          const dow=d.getDay(); if(dow===0||dow===6) continue;
+          const dateStr=d.toISOString().slice(0,10);
+          const ds=getDailyStatus(t.id,dateStr)||'pending';
+          rowsDet.push([proj.name||'', cli?.name||'', t.name, owner?.name||'', fd(t.dateStart), fd(t.dateEnd), fd(dateStr), SM[ds]?.l||ds, t.turno==='tarde'?'Tarde':'Manhã']);
+        }
+      } else {
+        rowsDet.push([proj.name||'', cli?.name||'', t.name, owner?.name||'', fd(t.dateStart||t.date), '', fd(t.dateStart||t.date), SM[t.status]?.l||t.status, t.turno==='tarde'?'Tarde':'Manhã']);
+      }
+    });
+  });
+
+  const wb=xlsxWB();
+  xlsxAppend(wb, xlsxSheet([headerRes,...rowsRes]), 'Resumo');
+  if(rowsDet.length) xlsxAppend(wb, xlsxSheet([headerDet,...rowsDet]), 'Detalhes');
+  const mesLabel=mes!==''&&mes!=null?MESES_REL[+mes]:'Todos';
+  xlsxDownload(wb, `agendas_projeto_${mesLabel}_${ano}.xlsx`);
+  showToast('✅ Relatório exportado!','success');
+}
+
+// ── Rel 4: Tarefas Realizadas + Comentários ───────────────
+async function exportRel4(){
+  const mesSel=$('rel4-mes'), anoSel=$('rel4-ano');
+  const filterOwner=$('rel4-owner')?.value||'';
+  const filterProj=$('rel4-proj')?.value||'';
+  const src=tasks.length?tasks:(await api('GET','/tasks'));
+
+  const filtered=src.filter(t=>{
+    if(filterOwner && t.ownerId!==filterOwner) return false;
+    if(filterProj && t.projId!==filterProj) return false;
+    const dateRef=t.date||t.dateStart||t.dateEnd||'';
+    if(!dateRef) return false;
+    const [y,m]=dateRef.split('-');
+    const ano=anoSel?.value||'';
+    const mes=mesSel?.value;
+    if(ano && y!==ano) return false;
+    if(mes!==''&&mes!=null && +m-1!==+mes) return false;
+    return true;
+  });
+
+  if(!filtered.length){ showToast('Nenhuma tarefa encontrada para o filtro','error'); return; }
+
+  const wb=xlsxWB();
+
+  // Aba 1: Tarefas
+  const headerT=['Tarefa','Status','Grupo','Responsável','Prioridade','Prazo','Data Início','Data Fim','Projeto','Cliente','Turno'];
+  const rowsT=filtered.map(t=>{
+    const proj=projects.find(p=>p.id===t.projId)||{};
+    const cli=clientById(proj.clientId);
+    return [t.name, SM[t.status]?.l||t.status, GROUPS[t.group]?.name||'', ownerById(t.ownerId)?.name||'',
+      PM[t.priority]?.l||'', fd(t.date)||'', fd(t.dateStart)||'', fd(t.dateEnd)||'',
+      proj.name||'', cli?.name||'', t.turno==='tarde'?'Tarde':'Manhã'];
+  });
+  xlsxAppend(wb, xlsxSheet([headerT,...rowsT]), 'Tarefas');
+
+  // Aba 2: Comentários
+  const headerC=['Data','Autor','Comentário','Tarefa','Projeto','Cliente','Responsável da Tarefa'];
+  const rowsC=[];
+  filtered.forEach(t=>{
+    const proj=projects.find(p=>p.id===t.projId)||{};
+    const cli=clientById(proj.clientId);
+    const ownerName=ownerById(t.ownerId)?.name||'';
+    const comments=Array.isArray(t.comments)?t.comments:[];
+    comments.forEach(c=>{
+      rowsC.push([
+        c.date?new Date(c.date).toLocaleString('pt-BR'):'',
+        c.author||c.user||'',
+        c.text||c.content||'',
+        t.name,
+        proj.name||'',
+        cli?.name||'',
+        ownerName
+      ]);
+    });
+  });
+  if(rowsC.length) xlsxAppend(wb, xlsxSheet([headerC,...rowsC]), 'Comentários');
+
+  const mesLabel=mesSel?.value!==''&&mesSel?.value!=null?MESES_REL[+mesSel.value]:'Todos';
+  xlsxDownload(wb, `tarefas_realizadas_${mesLabel}_${anoSel?.value||'geral'}.xlsx`);
+  showToast('✅ Relatório exportado!','success');
+}
+
+
 function exportCSV(){
   const ft=tasks.filter(t=>t.projId===activeProj);
   const rows=[['Tarefa','Status','Grupo','Responsável','Prioridade','Prazo','Projeto'],
