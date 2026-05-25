@@ -178,6 +178,17 @@ async function initDB() {
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS date_end   TEXT;
   `).catch(()=>{});
 
+  // ── Migration: tabela de status diário de agendas ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_daily_status (
+      task_id   TEXT NOT NULL,
+      date      TEXT NOT NULL,
+      status    TEXT NOT NULL DEFAULT 'pending',
+      updated_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (task_id, date)
+    );
+  `).catch(()=>{});
+
   console.log('[DB] PostgreSQL conectado e tabelas prontas.');
 }
 

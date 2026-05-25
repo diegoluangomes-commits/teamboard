@@ -589,4 +589,29 @@ router.delete('/ausencias/:id', async (req, res) => {
   send(res, { ok: true });
 });
 
+// ── Task Daily Status ───────────────────────────────────────
+// GET /task-daily-status?month=YYYY-MM  → retorna todos os registros do mês
+router.get('/task-daily-status', async (req, res) => {
+  const { month } = req.query; // ex: "2026-05"
+  try {
+    const { rows } = month
+      ? await q(`SELECT task_id, date, status FROM task_daily_status WHERE date LIKE $1 ORDER BY date`, [month + '-%'])
+      : await q(`SELECT task_id, date, status FROM task_daily_status ORDER BY date`);
+    send(res, rows.map(r => ({ taskId: r.task_id, date: r.date, status: r.status })));
+  } catch(err) { send(res, []); }
+});
+
+// POST /task-daily-status  → cria ou atualiza status do dia
+router.post('/task-daily-status', async (req, res) => {
+  const { taskId, date, status } = req.body;
+  if(!taskId || !date || !status) return send(res, { ok: false, error: 'taskId, date e status são obrigatórios' });
+  await q(
+    `INSERT INTO task_daily_status (task_id, date, status, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (task_id, date) DO UPDATE SET status=$3, updated_at=NOW()`,
+    [taskId, date, status]
+  );
+  send(res, { ok: true, taskId, date, status });
+});
+
 module.exports = router;

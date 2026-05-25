@@ -1365,8 +1365,39 @@ function getFeriados(year){
 }
 
 let allCalTasks=[];
+let taskDailyStatus = {}; // { "taskId|YYYY-MM-DD": "done"|"pending" }
+
 async function loadAllTasksForCal(){
   allCalTasks=await api('GET','/tasks');
+  // Carrega status diários do mês atual e adjacentes
+  const months=[
+    `${calY}-${String(calM).padStart(2,'0')}`,
+    `${calY}-${String(calM+1).padStart(2,'0')}`,
+    `${calY}-${String(calM+2).padStart(2,'0')}`
+  ];
+  taskDailyStatus={};
+  for(const m of months){
+    try{
+      const rows=await api('GET',`/task-daily-status?month=${m}`);
+      if(Array.isArray(rows)) rows.forEach(r=>{ taskDailyStatus[r.taskId+'|'+r.date]=r.status; });
+    }catch(e){}
+  }
+}
+
+async function loadDailyStatusForMonth(y, m){
+  const monthStr=`${y}-${String(m+1).padStart(2,'0')}`;
+  try{
+    const rows=await api('GET',`/task-daily-status?month=${monthStr}`);
+    if(Array.isArray(rows)) rows.forEach(r=>{ taskDailyStatus[r.taskId+'|'+r.date]=r.status; });
+  }catch(e){}
+}
+
+function getDailyStatus(taskId, dateStr){
+  return taskDailyStatus[taskId+'|'+dateStr]||null;
+}
+
+function hasPeriod(t){
+  return t.dateStart && t.dateEnd && t.dateStart !== t.dateEnd;
 }
 
 function calFilteredTasks(){
@@ -1621,23 +1652,47 @@ function calRenderDayList(ft, day){
     const ownerColor=o.color||'#888';
     const turnoIcon=t.turno==='tarde'?'🌙':'☀️';
     const turnoLabel=t.turno==='tarde'?'Tarde':'Manhã';
-    return `<div data-task-id="${t.id}" style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);transition:background .1s;${t.status==='done'?'opacity:.75':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+
+    // Para tarefas com período, usa status do dia específico; para dia único usa status da tarefa
+    const isPeriod=hasPeriod(t);
+    // dateStr do dia sendo exibido
+    let dateStr='';
+    if(day){
+      dateStr=`${calY}-${String(calM+1).padStart(2,'0')}-${day.padStart(2,'0')}`;
+    } else {
+      // na visão "todos os dias", usa a data de início da tarefa como referência
+      dateStr=t.dateStart||t.date||'';
+    }
+    const dailySt=isPeriod?getDailyStatus(t.id, dateStr):null;
+    const effectiveStatus=isPeriod?(dailySt||'pending'):t.status;
+    const isDone=effectiveStatus==='done';
+
+    // id do checkbox inclui a data para tarefas com período
+    const checkId=isPeriod?`cal-check-${t.id}--${dateStr}`:`cal-check-${t.id}`;
+    const pillId=isPeriod?`cal-pill-${t.id}--${dateStr}`:`cal-pill-${t.id}`;
+    const nameId=isPeriod?`${t.id}--${dateStr}`:t.id;
+    const onclick=isPeriod
+      ?`event.stopPropagation();toggleDoneCalTask('${t.id}','${dateStr}')`
+      :`event.stopPropagation();toggleDoneCalTask('${t.id}')`;
+
+    return `<div data-task-id="${t.id}" data-date="${dateStr}" style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);transition:background .1s;${isDone?'opacity:.75':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
       <div style="width:3px;height:40px;border-radius:2px;background:${ownerColor};flex-shrink:0"></div>
-      <div id="cal-check-${t.id}" onclick="event.stopPropagation();toggleDoneCalTask('${t.id}')" title="${t.status==='done'?'Marcar como pendente':'Marcar como realizado'}"
-        style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${t.status==='done'?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${t.status==='done'?'#3B6D11':'transparent'};flex-shrink:0">
-        ${t.status==='done'?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+      <div id="${checkId}" onclick="${onclick}" title="${isDone?'Marcar como pendente':'Marcar como realizado'}"
+        style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${isDone?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${isDone?'#3B6D11':'transparent'};flex-shrink:0">
+        ${isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
       </div>
       <div style="flex:1;min-width:0;cursor:pointer" onclick="openEditTask('${t.id}')">
-        <div data-task-name="${t.id}" style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${t.status==='done'?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</div>
+        <div data-task-name="${nameId}" style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${isDone?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:6px">
           <span>${esc(proj.name||'')}</span>
           ${cli.name?`<span style="background:#EEEDFE;color:#3C3489;padding:0 4px;border-radius:3px;font-size:10px">${esc(cli.name)}</span>`:''}
           <span style="color:var(--text3)">${g.name}</span>
+          ${isPeriod?`<span style="background:#F1EFEA;color:#6b6b67;padding:0 4px;border-radius:3px;font-size:9px">📅 ${fd(dateStr)}</span>`:''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
         <span style="font-size:11px;background:${t.turno==='tarde'?'#E6F1FB':'#FAEEDA'};color:${t.turno==='tarde'?'#0C447C':'#854F0B'};padding:2px 7px;border-radius:8px;font-weight:500">${turnoIcon} ${turnoLabel}</span>
-        <span id="cal-pill-${t.id}" class="pill ${SM[t.status].c}" style="font-size:10px">${SM[t.status].l}</span>
+        <span id="${pillId}" class="pill ${SM[effectiveStatus]?.c||SM['pending'].c}" style="font-size:10px">${SM[effectiveStatus]?.l||SM['pending'].l}</span>
         <span style="font-size:11px;color:var(--text2)">${periodo}</span>
         <div class="av" style="background:${ownerColor};color:#fff;font-size:9px;width:24px;height:24px" title="${esc(o.name||'')}">${o.initials||'?'}</div>
       </div>
@@ -1649,33 +1704,61 @@ function calNav(d){
   calM+=d;
   if(calM>11){calM=0;calY++;}
   else if(calM<0){calM=11;calY--;}
-  renderCalendar();
+  loadDailyStatusForMonth(calY, calM).then(renderCalendar);
 }
 
-async function toggleDoneCalTask(id){
+async function toggleDoneCalTask(id, dateStr){
   const t=allCalTasks.find(x=>x.id===id)||tasks.find(x=>x.id===id);
   if(!t)return;
-  const newStatus=t.status==='done'?'pending':'done';
-  const isDone=newStatus==='done';
-  // Atualiza arrays
-  await api('PUT','/tasks/'+id,{...t,status:newStatus});
-  if(allCalTasks.find(x=>x.id===id)) allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:newStatus}:x);
-  if(tasks.find(x=>x.id===id)) tasks=tasks.map(x=>x.id===id?{...x,status:newStatus}:x);
-  // Atualiza APENAS o elemento clicado no DOM — sem re-renderizar a lista inteira
-  const chk=document.getElementById('cal-check-'+id);
-  if(chk){
-    chk.style.borderColor=isDone?'#3B6D11':'#ccc';
-    chk.style.background=isDone?'#3B6D11':'transparent';
-    chk.title=isDone?'Marcar como pendente':'Marcar como realizado';
-    chk.innerHTML=isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':'';
-    const row=chk.closest('[data-task-id]');
-    if(row) row.style.opacity=isDone?'.75':'1';
-    const name=document.querySelector(`[data-task-name="${id}"]`);
-    if(name){ name.style.textDecoration=isDone?'line-through':'none'; name.style.color=isDone?'var(--text3)':''; }
-    const pill=document.getElementById('cal-pill-'+id);
-    if(pill){ pill.className='pill '+(isDone?SM['done'].c:SM['pending'].c); pill.textContent=isDone?SM['done'].l:SM['pending'].l; }
+
+  const isPeriod=hasPeriod(t);
+
+  if(isPeriod && dateStr){
+    // ── Tarefa com período: grava status só para o dia clicado ──
+    const current=getDailyStatus(id, dateStr)||'pending';
+    const newStatus=current==='done'?'pending':'done';
+    const isDone=newStatus==='done';
+    await api('POST','/task-daily-status',{taskId:id, date:dateStr, status:newStatus});
+    taskDailyStatus[id+'|'+dateStr]=newStatus;
+    // Atualiza DOM cirurgicamente
+    const checkId=`cal-check-${id}--${dateStr}`;
+    const chk=document.getElementById(checkId);
+    if(chk){
+      chk.style.borderColor=isDone?'#3B6D11':'#ccc';
+      chk.style.background=isDone?'#3B6D11':'transparent';
+      chk.title=isDone?'Marcar como pendente':'Marcar como realizado';
+      chk.innerHTML=isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':'';
+      const row=chk.closest('[data-task-id]');
+      if(row) row.style.opacity=isDone?'.75':'1';
+      const nameKey=`${id}--${dateStr}`;
+      const name=document.querySelector(`[data-task-name="${nameKey}"]`);
+      if(name){ name.style.textDecoration=isDone?'line-through':'none'; name.style.color=isDone?'var(--text3)':''; }
+      const pill=document.getElementById(`cal-pill-${id}--${dateStr}`);
+      if(pill){ pill.className='pill '+(isDone?SM['done'].c:SM['pending'].c); pill.textContent=isDone?SM['done'].l:SM['pending'].l; }
+    }
+    showToast(isDone?'✅ Realizado no dia '+fd(dateStr)+'!':'↩️ Desmarcado','success');
+  } else {
+    // ── Tarefa de dia único: comportamento original ──
+    const newStatus=t.status==='done'?'pending':'done';
+    const isDone=newStatus==='done';
+    await api('PUT','/tasks/'+id,{...t,status:newStatus});
+    if(allCalTasks.find(x=>x.id===id)) allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:newStatus}:x);
+    if(tasks.find(x=>x.id===id)) tasks=tasks.map(x=>x.id===id?{...x,status:newStatus}:x);
+    const chk=document.getElementById('cal-check-'+id);
+    if(chk){
+      chk.style.borderColor=isDone?'#3B6D11':'#ccc';
+      chk.style.background=isDone?'#3B6D11':'transparent';
+      chk.title=isDone?'Marcar como pendente':'Marcar como realizado';
+      chk.innerHTML=isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':'';
+      const row=chk.closest('[data-task-id]');
+      if(row) row.style.opacity=isDone?'.75':'1';
+      const name=document.querySelector(`[data-task-name="${id}"]`);
+      if(name){ name.style.textDecoration=isDone?'line-through':'none'; name.style.color=isDone?'var(--text3)':''; }
+      const pill=document.getElementById('cal-pill-'+id);
+      if(pill){ pill.className='pill '+(isDone?SM['done'].c:SM['pending'].c); pill.textContent=isDone?SM['done'].l:SM['pending'].l; }
+    }
+    showToast(isDone?'✅ Agenda marcada como realizada!':'↩️ Agenda desmarcada','success');
   }
-  showToast(isDone?'✅ Agenda marcada como realizada!':'↩️ Agenda desmarcada','success');
 }
 
 // ── Users ──────────────────────────────────────────────────
