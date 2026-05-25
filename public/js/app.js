@@ -1660,7 +1660,8 @@ async function toggleDoneCalTask(id){
   // Atualiza nos dois arrays
   if(allCalTasks.find(x=>x.id===id)) allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:newStatus}:x);
   if(tasks.find(x=>x.id===id)) tasks=tasks.map(x=>x.id===id?{...x,status:newStatus}:x);
-  renderCalendar();
+  // Atualiza só a lista de tarefas (mantém dia selecionado), sem re-renderizar o grid inteiro
+  calRenderDayList(calFilteredTasks(), calSelectedDay);
   showToast(newStatus==='done'?'✅ Agenda marcada como realizada!':'↩️ Agenda desmarcada','success');
 }
 
@@ -1975,7 +1976,152 @@ function renderAgendasOwner(){
   content.innerHTML=html||'<div style="padding:20px;text-align:center;color:var(--text3)">Nenhuma agenda encontrada.</div>';
 }
 
-// ── Controle de Agendas (legado) ───────────────────────────
+// ── Dashboard de Agendas ───────────────────────────────────
+function renderAgendaDash(){
+  const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const content=$('agenda-dash-content');if(!content)return;
+
+  // ── Ano ──
+  const anoSel=$('adash-ano');
+  if(anoSel){
+    const years=[...new Set(allCalTasks.map(t=>(t.dateStart||t.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+    if(!years.length)years.push(new Date().getFullYear().toString());
+    if(!anoSel.value||anoSel.innerHTML.trim()===''){
+      anoSel.innerHTML=years.map(y=>`<option value="${y}">${y}</option>`).join('');
+      anoSel.value=new Date().getFullYear().toString();
+      if(!years.includes(anoSel.value))anoSel.value=years[0];
+    }
+  }
+  const curYear=anoSel?.value||new Date().getFullYear().toString();
+
+  // ── Mês (padrão: mês atual) ──
+  const mesSel=$('adash-mes');
+  if(mesSel&&mesSel.value===''&&!mesSel._defaultSet){
+    mesSel.value=String(new Date().getMonth());
+    mesSel._defaultSet=true;
+  }
+  const filterMes=mesSel?.value!==''&&mesSel?.value!=null?+mesSel.value:-1;
+
+  const yearTasks=allCalTasks.filter(t=>(t.dateStart||t.date||'').startsWith(curYear));
+  const filteredTasks=filterMes>=0
+    ?yearTasks.filter(t=>{const d=t.dateStart||t.date||'';return d&&+d.slice(5,7)-1===filterMes;})
+    :yearTasks;
+
+  const total=filteredTasks.length;
+  const realizadas=filteredTasks.filter(t=>t.status==='done').length;
+  const pendentes=total-realizadas;
+  const pctGeral=total?Math.round(realizadas/total*100):0;
+  const pctColor=pctGeral>=100?'var(--green)':pctGeral>=50?'var(--amber)':'var(--red)';
+
+  // ── Cards ──
+  const cardsHtml=`
+    <div class="sbar" style="margin-bottom:16px">
+      <div class="sc flex1"><div class="slabel">Total Agendadas</div><div class="sval blue">${total}</div></div>
+      <div class="sc flex1"><div class="slabel">Realizadas</div><div class="sval green">${realizadas}</div></div>
+      <div class="sc flex1"><div class="slabel">Pendentes</div><div class="sval amber">${pendentes}</div></div>
+      <div class="sc flex1">
+        <div class="slabel">% Realizado</div>
+        <div class="sval" style="color:${pctColor}">${pctGeral}%</div>
+        <div class="pbar"><div style="height:3px;background:${pctColor};width:${Math.min(pctGeral,100)}%;border-radius:2px"></div></div>
+      </div>
+    </div>`;
+
+  // ── Gráfico por mês (apenas se filtro = todos os meses) ──
+  let chartHtml='';
+  if(filterMes<0){
+    const byMonth=Array.from({length:12},(_,i)=>{
+      const mTasks=yearTasks.filter(t=>{const d=t.dateStart||t.date||'';return d&&+d.slice(5,7)-1===i;});
+      return{label:MONTHS[i].slice(0,3),total:mTasks.length,realizadas:mTasks.filter(t=>t.status==='done').length};
+    });
+    const maxVal=Math.max(...byMonth.map(m=>m.total),1);
+    const barW=52; const gap=8; const chartH=120; const padL=28; const padB=22;
+    const totalW=padL+(barW+gap)*12+gap;
+    const bars=byMonth.map((m,i)=>{
+      const x=padL+gap+(barW+gap)*i;
+      const hTotal=Math.round((m.total/maxVal)*chartH);
+      const hReal=m.total?Math.round((m.realizadas/m.total)*hTotal):0;
+      const yTotal=chartH-hTotal; const yReal=chartH-hReal;
+      const pct=m.total?Math.round(m.realizadas/m.total*100):0;
+      const curMes=i===new Date().getMonth()&&curYear===String(new Date().getFullYear());
+      return `<g>
+        ${m.total?`<rect x="${x}" y="${yTotal}" width="${barW}" height="${hTotal}" rx="3" fill="#B5D4F4" opacity="${curMes?1:.7}"/>`:''}
+        ${m.realizadas?`<rect x="${x}" y="${yReal}" width="${barW}" height="${hReal}" rx="3" fill="#3B6D11" opacity="${curMes?1:.8}"/>`:''}
+        ${m.total?`<text x="${x+barW/2}" y="${yTotal-3}" text-anchor="middle" font-size="9" fill="#185FA5" font-weight="500">${m.total}</text>`:''}
+        ${m.realizadas&&m.total?`<text x="${x+barW/2}" y="${yReal-3}" text-anchor="middle" font-size="9" fill="#3B6D11">${pct}%</text>`:''}
+        <text x="${x+barW/2}" y="${chartH+padB-8}" text-anchor="middle" font-size="9" fill="${curMes?'#185FA5':'var(--text2)'}" font-weight="${curMes?'600':'400'}">${m.label}</text>
+      </g>`;
+    }).join('');
+    // Eixo Y
+    const yLines=[0,.25,.5,.75,1].map(p=>{
+      const y=Math.round(chartH-p*chartH);
+      const v=Math.round(p*maxVal);
+      return `<line x1="${padL}" y1="${y}" x2="${totalW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>
+        <text x="${padL-4}" y="${y+3}" text-anchor="end" font-size="8" fill="var(--text3)">${v}</text>`;
+    }).join('');
+    chartHtml=`<div class="card-table" style="margin-bottom:16px;padding:16px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+        Agendas por Mês — ${curYear}
+        <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:#B5D4F4"></div><span style="font-size:10px;color:var(--text2)">Agendadas</span></div>
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:#3B6D11"></div><span style="font-size:10px;color:var(--text2)">Realizadas</span></div>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <svg viewBox="0 0 ${totalW} ${chartH+padB}" width="${totalW}" height="${chartH+padB}" style="display:block;min-width:${totalW}px">
+          ${yLines}${bars}
+        </svg>
+      </div>
+    </div>`;
+  }
+
+  // ── Tabela por responsável ──
+  const ownerRows=owners.filter(o=>o.active!==false).map(o=>{
+    const oTasks=filteredTasks.filter(t=>t.ownerId===o.id);
+    if(!oTasks.length)return null;
+    const oReal=oTasks.filter(t=>t.status==='done').length;
+    const oPct=Math.round(oReal/oTasks.length*100);
+    const barColor=oPct>=100?'#3B6D11':oPct>=50?'#BA7517':'#A32D2D';
+    return{name:o.name,initials:o.initials||'?',color:o.color||'#888',total:oTasks.length,realizadas:oReal,pct:oPct,barColor};
+  }).filter(Boolean).sort((a,b)=>b.total-a.total);
+
+  const tableHtml=ownerRows.length?`
+    <div class="card-table">
+      <div style="padding:10px 14px;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:500">Por Responsável</div>
+      <table style="width:100%">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:7px 12px;font-size:10px;text-align:left;font-weight:500;color:var(--text2)">Responsável</th>
+          <th style="padding:7px 12px;font-size:10px;text-align:center;font-weight:500;color:#185FA5">Agendadas</th>
+          <th style="padding:7px 12px;font-size:10px;text-align:center;font-weight:500;color:#3B6D11">Realizadas</th>
+          <th style="padding:7px 12px;font-size:10px;text-align:left;font-weight:500;color:var(--text2);min-width:160px">% Realizado</th>
+        </tr></thead>
+        <tbody>
+          ${ownerRows.map(r=>`<tr style="border-bottom:0.5px solid var(--border)">
+            <td style="padding:7px 12px">
+              <div style="display:flex;align-items:center;gap:7px">
+                <div class="av" style="background:${r.color};color:#fff;font-size:9px;width:22px;height:22px">${r.initials}</div>
+                <span style="font-size:12px">${esc(r.name)}</span>
+              </div>
+            </td>
+            <td style="padding:7px 12px;text-align:center;font-size:13px;font-weight:500;color:#185FA5">${r.total}</td>
+            <td style="padding:7px 12px;text-align:center;font-size:13px;font-weight:500;color:#3B6D11">${r.realizadas}</td>
+            <td style="padding:7px 12px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
+                  <div style="height:100%;background:${r.barColor};width:${Math.min(r.pct,100)}%;border-radius:3px;transition:width .3s"></div>
+                </div>
+                <span style="font-size:11px;font-weight:600;color:${r.barColor};min-width:34px;text-align:right">${r.pct}%</span>
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`
+    :'<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Nenhuma agenda encontrada para o período.</div>';
+
+  content.innerHTML=cardsHtml+chartHtml+tableHtml;
+}
+
+
 function renderAgendasCtrl(){
   const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const content=$('agendas-ctrl-content');if(!content)return;
@@ -2159,35 +2305,19 @@ function goPage(p){
   if(p==='templates')renderTemplates();
   if(p==='users')    renderUsersTable();
   if(p==='ausencias')renderAusenciasTable();
-  if(p==='agendas-proj'){
+  if(p==='agenda-dash'){
     if(allCalTasks.length){
-      const ys=$('agp-filter-year');if(ys)ys.innerHTML='';
-      const ps=$('agp-filter-proj');if(ps)ps.innerHTML='';
-      renderAgendasProj();
+      const as=$('adash-ano');if(as)as.innerHTML='';
+      const ms=$('adash-mes');if(ms)ms._defaultSet=false;
+      renderAgendaDash();
     } else {
-      const ct=$('agendas-proj-content');
-      if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
+      const ct=$('agenda-dash-content');
+      if(ct)ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
       loadAllTasksForCal().then(()=>{
-        const ys=$('agp-filter-year');if(ys)ys.innerHTML='';
-        const ps=$('agp-filter-proj');if(ps)ps.innerHTML='';
-        renderAgendasProj();
-        window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;document.querySelector('.content')?.scrollTo(0,0);
-      });
-    }
-  }
-  if(p==='agendas-owner'){
-    if(allCalTasks.length){
-      const ys=$('ago-filter-year');if(ys)ys.innerHTML='';
-      const os=$('ago-filter-owner');if(os)os.innerHTML='';
-      renderAgendasOwner();
-    } else {
-      const ct=$('agendas-owner-content');
-      if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
-      loadAllTasksForCal().then(()=>{
-        const ys=$('ago-filter-year');if(ys)ys.innerHTML='';
-        const os=$('ago-filter-owner');if(os)os.innerHTML='';
-        renderAgendasOwner();
-        window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;document.querySelector('.content')?.scrollTo(0,0);
+        const as=$('adash-ano');if(as)as.innerHTML='';
+        const ms=$('adash-mes');if(ms)ms._defaultSet=false;
+        renderAgendaDash();
+        document.querySelector('.content')?.scrollTo(0,0);
       });
     }
   }
