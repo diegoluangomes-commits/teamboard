@@ -2424,7 +2424,8 @@ function goPage(p){
   if(p==='relatorios'){
     if(!allCalTasks.length) loadAllTasksForCal();
     initRelatorios();
-    setTimeout(resetScroll,0);
+    // Duplo rAF garante reset após layout completo
+    requestAnimationFrame(()=>requestAnimationFrame(resetScroll));
   }
 }
 function switchView(v,el){
@@ -2488,8 +2489,9 @@ async function exportRel1(){
   const mesSel=$('rel1-mes'), anoSel=$('rel1-ano');
   const filterOwner=$('rel1-owner')?.value||'';
   const filterProj=$('rel1-proj')?.value||'';
-  // Garante tasks carregadas
-  const src=tasks.length?tasks:(await api('GET','/tasks'));
+  // Usa allCalTasks (todas as tarefas), carregando se necessário
+  if(!allCalTasks.length) await loadAllTasksForCal();
+  const src=allCalTasks;
 
   const filtered=src.filter(t=>{
     if(filterOwner && t.ownerId!==filterOwner) return false;
@@ -2533,8 +2535,6 @@ async function exportRel2(){
   const mes=mesSel?.value;
 
   if(!allCalTasks.length) await loadAllTasksForCal();
-
-  // Carrega status diários do período
   const monthStr=mes!==''&&mes!=null?`${ano}-${String(+mes+1).padStart(2,'0')}`:null;
   if(monthStr) await loadDailyStatusForMonth(+ano, +mes);
 
@@ -2550,10 +2550,36 @@ async function exportRel2(){
     ?owners.filter(o=>o.id===filterOwner)
     :owners.filter(o=>o.active!==false&&agendas.some(t=>t.ownerId===o.id));
 
+  // ── Aba Resumo ──
+  const headerRes=['Responsável','Agendadas','Dias Agendados','Realizados','Pendentes','% Realizado'];
+  const rowsRes=ownerList.map(owner=>{
+    const ownerTasks=agendas.filter(t=>t.ownerId===owner.id);
+    let diasAgendados=0, realizados=0;
+    ownerTasks.forEach(t=>{
+      if(hasPeriod(t)){
+        const start=new Date(t.dateStart+'T00:00:00');
+        const end=new Date(t.dateEnd+'T00:00:00');
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+          const dow=d.getDay(); if(dow===0||dow===6) continue;
+          diasAgendados++;
+          const dateStr=d.toISOString().slice(0,10);
+          if(getDailyStatus(t.id,dateStr)==='done') realizados++;
+        }
+      } else {
+        diasAgendados++;
+        if(t.status==='done') realizados++;
+      }
+    });
+    const pendentes=diasAgendados-realizados;
+    const pct=diasAgendados>0?Math.round(realizados/diasAgendados*100):0;
+    return [owner.name, ownerTasks.length, diasAgendados, realizados, pendentes, pct+'%'];
+  }).filter(r=>r[1]>0);
+  if(rowsRes.length) xlsxAppend(wb, xlsxSheet([headerRes,...rowsRes]), 'Resumo');
+
+  // ── Abas por responsável ──
   ownerList.forEach(owner=>{
     const ownerTasks=agendas.filter(t=>t.ownerId===owner.id);
     if(!ownerTasks.length) return;
-
     const header=['Tarefa','Projeto','Cliente','Data Início','Data Fim','Dia','Status do Dia','Turno'];
     const rows=[];
     ownerTasks.forEach(t=>{
@@ -2561,18 +2587,16 @@ async function exportRel2(){
       const cli=clientById(proj.clientId);
       const isPeriod=hasPeriod(t);
       if(isPeriod){
-        // Expande cada dia do período
         const start=new Date(t.dateStart+'T00:00:00');
         const end=new Date(t.dateEnd+'T00:00:00');
-        for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
           const dateStr=d.toISOString().slice(0,10);
-          const dow=d.getDay();
-          if(dow===0||dow===6) continue; // pula fim de semana
-          const ds=getDailyStatus(t.id, dateStr)||'pending';
-          rows.push([t.name, proj.name||'', cli?.name||'', fd(t.dateStart), fd(t.dateEnd), fd(dateStr), SM[ds]?.l||ds, t.turno==='tarde'?'Tarde':'Manhã']);
+          const dow=d.getDay(); if(dow===0||dow===6) continue;
+          const ds=getDailyStatus(t.id,dateStr)||'pending';
+          rows.push([t.name,proj.name||'',cli?.name||'',fd(t.dateStart),fd(t.dateEnd),fd(dateStr),SM[ds]?.l||ds,t.turno==='tarde'?'Tarde':'Manhã']);
         }
       } else {
-        rows.push([t.name, proj.name||'', cli?.name||'', fd(t.dateStart||t.date), '', fd(t.dateStart||t.date), SM[t.status]?.l||t.status, t.turno==='tarde'?'Tarde':'Manhã']);
+        rows.push([t.name,proj.name||'',cli?.name||'',fd(t.dateStart||t.date),'',fd(t.dateStart||t.date),SM[t.status]?.l||t.status,t.turno==='tarde'?'Tarde':'Manhã']);
       }
     });
     if(rows.length){
@@ -2671,7 +2695,9 @@ async function exportRel4(){
   const mesSel=$('rel4-mes'), anoSel=$('rel4-ano');
   const filterOwner=$('rel4-owner')?.value||'';
   const filterProj=$('rel4-proj')?.value||'';
-  const src=tasks.length?tasks:(await api('GET','/tasks'));
+  // Usa allCalTasks (todas as tarefas), carregando se necessário
+  if(!allCalTasks.length) await loadAllTasksForCal();
+  const src=allCalTasks;
 
   const filtered=src.filter(t=>{
     if(filterOwner && t.ownerId!==filterOwner) return false;
@@ -2701,8 +2727,8 @@ async function exportRel4(){
   });
   xlsxAppend(wb, xlsxSheet([headerT,...rowsT]), 'Tarefas');
 
-  // Aba 2: Comentários
-  const headerC=['Data','Autor','Comentário','Tarefa','Projeto','Cliente','Responsável da Tarefa'];
+  // Aba 2: Comentários — usa c.time (formato pt-BR) e c.text
+  const headerC=['Data/Hora','Autor','Comentário','Tarefa','Projeto','Cliente','Responsável da Tarefa'];
   const rowsC=[];
   filtered.forEach(t=>{
     const proj=projects.find(p=>p.id===t.projId)||{};
@@ -2711,7 +2737,7 @@ async function exportRel4(){
     const comments=Array.isArray(t.comments)?t.comments:[];
     comments.forEach(c=>{
       rowsC.push([
-        c.date?new Date(c.date).toLocaleString('pt-BR'):'',
+        c.time||c.date||'',          // campo correto é c.time
         c.author||c.user||'',
         c.text||c.content||'',
         t.name,
