@@ -2380,27 +2380,32 @@ function renderAgendasCtrl(){
 function switchAgTab(tab){ renderAgendasOwner(); }
 
 function goPage(p){
-  closeModal(); // Ajuste 4: fecha qualquer modal aberto ao navegar
+  closeModal();
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('act'));
-  document.getElementById('page-'+p)?.classList.add('active');
+  const pageEl=document.getElementById('page-'+p);
+  pageEl?.classList.add('active');
   document.getElementById('ni-'+p)?.classList.add('act');
-  // Reseta scroll ao trocar de página
+
   const resetScroll=()=>{
     const c=document.querySelector('.content');
-    if(c)c.scrollTop=0;
+    if(c){c.scrollTop=0;c.scrollLeft=0;}
+    if(pageEl) pageEl.scrollIntoView({behavior:'instant',block:'start'});
     window.scrollTo(0,0);
     document.documentElement.scrollTop=0;
     document.body.scrollTop=0;
   };
+  // Reset imediato + após render + backup 150ms
   resetScroll();
-  if(p==='clients')  { renderClientsTable();   setTimeout(resetScroll,0); }
-  if(p==='products') { renderProductsTable();  setTimeout(resetScroll,0); }
-  if(p==='owners')   { renderOwnersTable();    setTimeout(resetScroll,0); }
-  if(p==='sellers')  { renderSellersTable();   setTimeout(resetScroll,0); }
-  if(p==='templates'){ renderTemplates();      setTimeout(resetScroll,0); }
-  if(p==='users')    { renderUsersTable();     setTimeout(resetScroll,0); }
-  if(p==='ausencias'){ renderAusenciasTable(); setTimeout(resetScroll,0); }
+  setTimeout(resetScroll,0);
+  setTimeout(resetScroll,150);
+  if(p==='clients')  renderClientsTable();
+  if(p==='products') renderProductsTable();
+  if(p==='owners')   renderOwnersTable();
+  if(p==='sellers')  renderSellersTable();
+  if(p==='templates')renderTemplates();
+  if(p==='users')    renderUsersTable();
+  if(p==='ausencias')renderAusenciasTable();
   if(p==='agenda-dash'){
     if(allCalTasks.length){
       const as=$('adash-ano');if(as)as.innerHTML='';
@@ -2424,8 +2429,6 @@ function goPage(p){
   if(p==='relatorios'){
     if(!allCalTasks.length) loadAllTasksForCal();
     initRelatorios();
-    // Duplo rAF garante reset após layout completo
-    requestAnimationFrame(()=>requestAnimationFrame(resetScroll));
   }
 }
 function switchView(v,el){
@@ -2551,7 +2554,7 @@ async function exportRel2(){
     :owners.filter(o=>o.active!==false&&agendas.some(t=>t.ownerId===o.id));
 
   // ── Aba Resumo ──
-  const headerRes=['Responsável','Agendadas','Dias Agendados','Realizados','Pendentes','% Realizado'];
+  const headerRes=['Responsável','Qtd Tarefas','Dias Agendados','Dias Realizados','Dias Pendentes','% Realizado'];
   const rowsRes=ownerList.map(owner=>{
     const ownerTasks=agendas.filter(t=>t.ownerId===owner.id);
     let diasAgendados=0, realizados=0;
