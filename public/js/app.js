@@ -2385,6 +2385,15 @@ function goPage(p){
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('act'));
   document.getElementById('page-'+p)?.classList.add('active');
   document.getElementById('ni-'+p)?.classList.add('act');
+  // Bloqueia qualquer scroll no .content pelos próximos 300ms
+  const c=document.querySelector('.content');
+  if(c){
+    c.scrollTop=0;
+    let blocking=true;
+    const blocker=()=>{ if(blocking) c.scrollTop=0; };
+    c.addEventListener('scroll',blocker);
+    setTimeout(()=>{ blocking=false; c.removeEventListener('scroll',blocker); },300);
+  }
   if(p==='clients')  renderClientsTable();
   if(p==='products') renderProductsTable();
   if(p==='owners')   renderOwnersTable();
