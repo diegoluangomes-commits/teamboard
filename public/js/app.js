@@ -2383,22 +2383,8 @@ function goPage(p){
   closeModal();
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('act'));
-  const pageEl=document.getElementById('page-'+p);
-  pageEl?.classList.add('active');
+  document.getElementById('page-'+p)?.classList.add('active');
   document.getElementById('ni-'+p)?.classList.add('act');
-
-  const resetScroll=()=>{
-    const c=document.querySelector('.content');
-    if(c){c.scrollTop=0;c.scrollLeft=0;}
-    if(pageEl) pageEl.scrollIntoView({behavior:'instant',block:'start'});
-    window.scrollTo(0,0);
-    document.documentElement.scrollTop=0;
-    document.body.scrollTop=0;
-  };
-  // Reset imediato + após render + backup 150ms
-  resetScroll();
-  setTimeout(resetScroll,0);
-  setTimeout(resetScroll,150);
   if(p==='clients')  renderClientsTable();
   if(p==='products') renderProductsTable();
   if(p==='owners')   renderOwnersTable();
@@ -2411,7 +2397,6 @@ function goPage(p){
       const as=$('adash-ano');if(as)as.innerHTML='';
       const ms=$('adash-mes');if(ms)ms._defaultSet=false;
       renderAgendaDash();
-      setTimeout(resetScroll,0);
     } else {
       const ct=$('agenda-dash-content');
       if(ct)ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
@@ -2419,7 +2404,6 @@ function goPage(p){
         const as=$('adash-ano');if(as)as.innerHTML='';
         const ms=$('adash-mes');if(ms)ms._defaultSet=false;
         renderAgendaDash();
-        setTimeout(resetScroll,0);
       });
     }
   }
