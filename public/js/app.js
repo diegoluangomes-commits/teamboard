@@ -2389,10 +2389,14 @@ function goPage(p){
   const c=document.querySelector('.content');
   if(c){
     c.scrollTop=0;
+    window.scrollTo(0,0);
+    document.documentElement.scrollTop=0;
+    document.body.scrollTop=0;
     let blocking=true;
-    const blocker=()=>{ if(blocking) c.scrollTop=0; };
+    const blocker=()=>{ if(blocking){ c.scrollTop=0; window.scrollTo(0,0); document.documentElement.scrollTop=0; document.body.scrollTop=0; }};
     c.addEventListener('scroll',blocker);
-    setTimeout(()=>{ blocking=false; c.removeEventListener('scroll',blocker); },300);
+    window.addEventListener('scroll',blocker);
+    setTimeout(()=>{ blocking=false; c.removeEventListener('scroll',blocker); window.removeEventListener('scroll',blocker); },500);
   }
   if(p==='clients')  renderClientsTable();
   if(p==='products') renderProductsTable();
