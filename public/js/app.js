@@ -2389,14 +2389,10 @@ function goPage(p){
   const c=document.querySelector('.content');
   if(c){
     c.scrollTop=0;
-    window.scrollTo(0,0);
-    document.documentElement.scrollTop=0;
-    document.body.scrollTop=0;
     let blocking=true;
-    const blocker=()=>{ if(blocking){ c.scrollTop=0; window.scrollTo(0,0); document.documentElement.scrollTop=0; document.body.scrollTop=0; }};
+    const blocker=()=>{ if(blocking) c.scrollTop=0; };
     c.addEventListener('scroll',blocker);
-    window.addEventListener('scroll',blocker);
-    setTimeout(()=>{ blocking=false; c.removeEventListener('scroll',blocker); window.removeEventListener('scroll',blocker); },500);
+    setTimeout(()=>{ blocking=false; c.removeEventListener('scroll',blocker); },500);
   }
   if(p==='clients')  renderClientsTable();
   if(p==='products') renderProductsTable();
@@ -2425,7 +2421,14 @@ function goPage(p){
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
   if(p==='relatorios'){
     if(!allCalTasks.length) loadAllTasksForCal();
-    initRelatorios();
+    const c=document.querySelector('.content');
+    if(c) c.scrollTop=0;
+    // Roda initRelatorios no próximo frame para evitar scroll do browser ao setar select.value
+    requestAnimationFrame(()=>{
+      initRelatorios();
+      if(c) c.scrollTop=0;
+      requestAnimationFrame(()=>{ if(c) c.scrollTop=0; });
+    });
   }
 }
 function switchView(v,el){
