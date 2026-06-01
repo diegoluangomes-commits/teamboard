@@ -2421,14 +2421,7 @@ function goPage(p){
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
   if(p==='relatorios'){
     if(!allCalTasks.length) loadAllTasksForCal();
-    const c=document.querySelector('.content');
-    if(c) c.scrollTop=0;
-    // Roda initRelatorios no próximo frame para evitar scroll do browser ao setar select.value
-    requestAnimationFrame(()=>{
-      initRelatorios();
-      if(c) c.scrollTop=0;
-      requestAnimationFrame(()=>{ if(c) c.scrollTop=0; });
-    });
+    initRelatorios();
   }
 }
 function switchView(v,el){
@@ -2454,8 +2447,12 @@ function initRelatorios(){
     if(anoSel){
       anoSel.innerHTML=years.map(y=>`<option value="${y}"${y===String(thisYear)?' selected':''}>${y}</option>`).join('');
     }
+    // Pré-seleciona mês atual via selected attribute (não via .value para evitar scroll do browser)
     const mesSel=$(`rel${n}-mes`);
-    if(mesSel) mesSel.value=String(new Date().getMonth());
+    if(mesSel){
+      const curMes=String(new Date().getMonth());
+      Array.from(mesSel.options).forEach(opt=>{ opt.selected=(opt.value===curMes); });
+    }
   });
 
   // Owners
