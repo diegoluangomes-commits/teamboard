@@ -1494,13 +1494,14 @@ function renderCalendar(){
       const proj=projects.find(p=>p.id===t.projId)||{};
       const cli=clientById(proj.clientId);
       const turnoIcon=t.turno==='tarde'?'🌙':'☀️';
+      const turnoBorderColor=t.turno==='tarde'?'#3B6D11':'#EF9F27';
       const isStart=(!t.dateStart&&t.date===ds)||(t.dateStart===ds);
       const periodo=t.dateStart&&t.dateEnd?`${fd(t.dateStart)} → ${fd(t.dateEnd)}`:fd(t.dateStart||t.dateEnd||t.date);
       const tooltipTitle=`${t.name}${cli.name?' · '+cli.name:''} · ${turnoIcon} ${t.turno==='tarde'?'Tarde':'Manhã'}${periodo?' · '+periodo:''}`;
       html+=`<div onclick="event.stopPropagation();openEditTask('${t.id}')"
         title="${esc(tooltipTitle)}"
         style="font-size:10px;padding:2px 5px;border-radius:4px;margin-bottom:2px;cursor:pointer;
-               background:${bgColor};color:var(--text);border-left:3px solid ${ownerColor};
+               background:${bgColor};color:var(--text);border-left:3px solid ${ownerColor};border-bottom:2px solid ${turnoBorderColor};
                display:flex;align-items:center;gap:3px;overflow:hidden">
         <span style="font-size:9px;flex-shrink:0">${turnoIcon}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${isStart?esc(t.name):''}</span>
