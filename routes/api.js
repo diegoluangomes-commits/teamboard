@@ -288,28 +288,6 @@ router.get('/tasks', async (req, res) => {
   send(res, rows.map(toTask));
 });
 
-// GET /task-stats — resumo de contagem por projeto (leve, sem dados completos)
-router.get('/task-stats', async (req, res) => {
-  const { rows } = await q(`
-    SELECT
-      proj_id                                          AS "projId",
-      COUNT(*)                                         AS total,
-      COUNT(*) FILTER (WHERE status='done')            AS done,
-      COUNT(*) FILTER (WHERE status NOT IN ('na','cancel')) AS applicable
-    FROM tasks
-    GROUP BY proj_id
-  `);
-  const stats = {};
-  rows.forEach(r => {
-    stats[r.projId] = {
-      total:      parseInt(r.total),
-      done:       parseInt(r.done),
-      applicable: parseInt(r.applicable)
-    };
-  });
-  send(res, stats);
-});
-
 router.post('/tasks', async (req, res) => {
   const { name, projId, group, status, ownerId, priority, date, dateStart, dateEnd, turno, desc, meet } = req.body;
   const id = uuidv4();
