@@ -31,6 +31,7 @@ let sellers    = [];
 let templates  = [];
 let users      = [];
 let ausencias  = [];
+let projStats  = {}; // { projId: { total, done, applicable } }
 let activeProj = null;
 let editingTask = null, editingClient = null, editingProj = null;
 let editingProduct = null, editingOwner = null, editingSeller = null, editingTemplate = null, editingUser = null;
@@ -215,6 +216,8 @@ async function loadAll() {
     api('GET','/owners'),   api('GET','/sellers'), api('GET','/templates'),
     api('GET','/users'),    api('GET','/ausencias')
   ]);
+  // Carrega contagem de tarefas por projeto (leve — sem dados completos)
+  projStats = await api('GET','/tasks/stats').catch(()=>({}));
   if (projects.length) {
     activeProj = activeProj || projects[0].id;
     tasks = await api('GET', '/tasks?projId=' + activeProj);
@@ -299,10 +302,20 @@ function renderProjGrid() {
       return a.dateStart.localeCompare(b.dateStart);
     });
   el.innerHTML = filtered.map(p => {
-    const pt = tasks.filter(t=>t.projId===p.id);
-    const dn = pt.filter(t=>t.status==='done').length;
-    const applicable = pt.filter(t=>t.status!=='na'&&t.status!=='cancel').length;
-    const pct = applicable ? Math.round(dn/applicable*100) : 0;
+    // Usa stats do projeto ativo (tasks carregadas) ou projStats (resumo de todos)
+    let total, dn, applicable, pct;
+    if(p.id === activeProj && tasks.length){
+      const pt = tasks.filter(t=>t.projId===p.id);
+      total      = pt.length;
+      dn         = pt.filter(t=>t.status==='done').length;
+      applicable = pt.filter(t=>t.status!=='na'&&t.status!=='cancel').length;
+    } else {
+      const st   = projStats[p.id] || {};
+      total      = st.total      || 0;
+      dn         = st.done       || 0;
+      applicable = st.applicable || 0;
+    }
+    pct = applicable ? Math.round(dn/applicable*100) : 0;
     const cli = clientById(p.clientId);
     const prod= productById(p.productId);
     const hasDesc=p.desc&&p.desc.trim().length>0;
@@ -904,6 +917,7 @@ async function saveProj(){
     }
   }
   projects=await api('GET','/projects');
+  projStats=await api('GET','/tasks/stats').catch(()=>({}));
   tasks=await api('GET','/tasks?projId='+activeProj);
   closeModal();renderAll();
 }
