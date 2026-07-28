@@ -1514,8 +1514,8 @@ function renderCalendar(){
                background:${bgColor};color:var(--text);border-left:3px solid ${ownerColor};border-bottom:2px solid ${turnoBorderColor};
                display:flex;align-items:center;gap:3px;overflow:hidden">
         <span style="font-size:9px;flex-shrink:0">${turnoIcon}</span>
-        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${isStart?esc(t.name):''}</span>
-        ${cli.name&&isStart?`<span style="opacity:.7;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40px">${esc(cli.name)}</span>`:''}
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${esc(t.name)}</span>
+        ${cli.name?`<span style="opacity:.7;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40px">${esc(cli.name)}</span>`:''}
         <span style="font-size:9px;font-weight:700;flex-shrink:0;color:${ownerColor}">${o.initials||''}</span>
       </div>`;
     });
