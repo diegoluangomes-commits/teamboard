@@ -1487,7 +1487,17 @@ function renderCalendar(){
       ${isFeriado?`<span style="font-size:9px;color:#854F0B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${esc(feriadoNome)}">${esc(feriadoNome)}</span>`:''}
     </div>`;
 
-    dayTasks.forEach(t=>{
+    const dayTasksSorted=dayTasks.slice().sort((a,b)=>{
+      // Manhã (manha) antes da tarde
+      const turnoA=a.turno==='tarde'?1:0;
+      const turnoB=b.turno==='tarde'?1:0;
+      if(turnoA!==turnoB) return turnoA-turnoB;
+      // Dentro do mesmo turno, ordena por nome do responsável
+      const nA=ownerById(a.ownerId)?.name||'';
+      const nB=ownerById(b.ownerId)?.name||'';
+      return nA.localeCompare(nB,'pt-BR');
+    });
+    dayTasksSorted.forEach(t=>{
       const o=ownerById(t.ownerId);
       const ownerColor=o.color||'#888';
       const bgColor=ownerColor+'22';
