@@ -324,32 +324,6 @@
       </div>
     </div>
 
-    <div id="modal-area"></div>
-  </div>
-</div>
-
-<!-- Tela de Login -->
-<div id="login-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;align-items:center;justify-content:center">
-  <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r-lg);padding:32px 28px;width:380px;max-width:90vw">
-    <div style="text-align:center;margin-bottom:24px">
-      <img src="/solidez.jpg" alt="Solidez Soluções Empresariais" style="height:60px;max-width:240px;object-fit:contain;display:block;margin:0 auto"/>
-      <div style="font-size:11px;color:var(--text3);margin-top:8px;letter-spacing:.03em">Sistema de Gestão de Projetos</div>
-    </div>
-    <div id="login-error" style="display:none;background:#FCEBEB;color:#A32D2D;border:0.5px solid #F09595;border-radius:var(--r-md);padding:9px 12px;font-size:12px;margin-bottom:12px"></div>
-    <div style="margin-bottom:11px">
-      <label style="display:block;font-size:10px;color:var(--text2);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">E-mail</label>
-      <input id="login-email" type="email" placeholder="seu@email.com" style="width:100%;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit" onkeydown="if(event.key==='Enter')doLogin()"/>
-    </div>
-    <div style="margin-bottom:20px">
-      <label style="display:block;font-size:10px;color:var(--text2);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Senha</label>
-      <input id="login-password" type="password" placeholder="••••••••" style="width:100%;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit" onkeydown="if(event.key==='Enter')doLogin()"/>
-    </div>
-    <button onclick="doLogin()" style="width:100%;padding:10px;background:#185FA5;color:#B5D4F4;border:none;border-radius:var(--r-md);font-size:13px;font-weight:500;cursor:pointer">Entrar</button>
-  </div>
-</div>
-
-    <!-- Dashboard de Agendas -->
-
     <!-- Relatórios -->
     <div class="page" id="page-relatorios">
       <div class="ph"><div class="ptitle">Relatórios</div></div>
@@ -439,6 +413,32 @@
 
       </div>
     </div>
+
+    <div id="modal-area"></div>
+  </div>
+</div>
+
+<!-- Tela de Login -->
+<div id="login-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r-lg);padding:32px 28px;width:380px;max-width:90vw">
+    <div style="text-align:center;margin-bottom:24px">
+      <img src="/solidez.jpg" alt="Solidez Soluções Empresariais" style="height:60px;max-width:240px;object-fit:contain;display:block;margin:0 auto"/>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;letter-spacing:.03em">Sistema de Gestão de Projetos</div>
+    </div>
+    <div id="login-error" style="display:none;background:#FCEBEB;color:#A32D2D;border:0.5px solid #F09595;border-radius:var(--r-md);padding:9px 12px;font-size:12px;margin-bottom:12px"></div>
+    <div style="margin-bottom:11px">
+      <label style="display:block;font-size:10px;color:var(--text2);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">E-mail</label>
+      <input id="login-email" type="email" placeholder="seu@email.com" style="width:100%;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="display:block;font-size:10px;color:var(--text2);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Senha</label>
+      <input id="login-password" type="password" placeholder="••••••••" style="width:100%;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <button onclick="doLogin()" style="width:100%;padding:10px;background:#185FA5;color:#B5D4F4;border:none;border-radius:var(--r-md);font-size:13px;font-weight:500;cursor:pointer">Entrar</button>
+  </div>
+</div>
+
+
 
 <script src="/js/xlsx.full.min.js"></script>
 <script src="/js/app.js"></script>
