@@ -217,7 +217,7 @@ async function loadAll() {
     api('GET','/users'),    api('GET','/ausencias')
   ]);
   // Carrega contagem de tarefas por projeto (leve — sem dados completos)
-  projStats = await api('GET','/tasks/stats').catch(()=>({}));
+  projStats = await api('GET','/task-stats').catch(()=>({}));
   if (projects.length) {
     activeProj = activeProj || projects[0].id;
     tasks = await api('GET', '/tasks?projId=' + activeProj);
@@ -917,7 +917,7 @@ async function saveProj(){
     }
   }
   projects=await api('GET','/projects');
-  projStats=await api('GET','/tasks/stats').catch(()=>({}));
+  projStats=await api('GET','/task-stats').catch(()=>({}));
   tasks=await api('GET','/tasks?projId='+activeProj);
   closeModal();renderAll();
 }

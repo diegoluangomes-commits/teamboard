@@ -288,8 +288,8 @@ router.get('/tasks', async (req, res) => {
   send(res, rows.map(toTask));
 });
 
-// GET /tasks/stats — resumo de contagem por projeto (leve, sem dados completos)
-router.get('/tasks/stats', async (req, res) => {
+// GET /task-stats — resumo de contagem por projeto (leve, sem dados completos)
+router.get('/task-stats', async (req, res) => {
   const { rows } = await q(`
     SELECT
       proj_id                                          AS "projId",
