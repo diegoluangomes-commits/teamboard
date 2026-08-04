@@ -254,6 +254,9 @@ router.put('/projects/:id', async (req, res) => {
 });
 
 router.delete('/projects/:id', async (req, res) => {
+  // Cascade: remove status diários das tarefas, depois as tarefas, depois o projeto
+  await q(`DELETE FROM task_daily_status WHERE task_id IN (SELECT id FROM tasks WHERE proj_id=$1)`, [req.params.id]).catch(()=>{});
+  await q('DELETE FROM tasks WHERE proj_id=$1', [req.params.id]);
   await q('DELETE FROM projects WHERE id=$1', [req.params.id]);
   send(res, { ok: true });
 });
@@ -323,6 +326,8 @@ router.put('/tasks/:id', async (req, res) => {
 });
 
 router.delete('/tasks/:id', async (req, res) => {
+  // Cascade: remove os status diários vinculados
+  await q('DELETE FROM task_daily_status WHERE task_id=$1', [req.params.id]).catch(()=>{});
   await q('DELETE FROM tasks WHERE id=$1', [req.params.id]);
   send(res, { ok: true });
 });
@@ -375,6 +380,16 @@ router.put('/clients/:id', async (req, res) => {
 });
 
 router.delete('/clients/:id', async (req, res) => {
+  // Verifica se há projetos vinculados
+  const { rows: deps } = await q('SELECT name FROM projects WHERE client_id=$1 LIMIT 5', [req.params.id]);
+  if (deps.length) {
+    const { rows: [{ total }] } = await q('SELECT COUNT(*) AS total FROM projects WHERE client_id=$1', [req.params.id]);
+    return res.status(409).json({
+      error: 'CLIENTE_EM_USO',
+      message: `Não é possível excluir: cliente vinculado a ${total} projeto(s).`,
+      items: deps.map(d => d.name)
+    });
+  }
   await q('DELETE FROM clients WHERE id=$1', [req.params.id]);
   send(res, { ok: true });
 });
@@ -406,6 +421,18 @@ router.put('/products/:id', async (req, res) => {
 });
 
 router.delete('/products/:id', async (req, res) => {
+  const { rows: projs } = await q('SELECT name FROM projects WHERE product_id=$1 LIMIT 5', [req.params.id]);
+  const { rows: clis }  = await q('SELECT name FROM clients  WHERE product_id=$1 LIMIT 5', [req.params.id]);
+  if (projs.length || clis.length) {
+    const partes = [];
+    if (projs.length) partes.push(`${projs.length} projeto(s)`);
+    if (clis.length)  partes.push(`${clis.length} cliente(s)`);
+    return res.status(409).json({
+      error: 'PRODUTO_EM_USO',
+      message: `Não é possível excluir: produto vinculado a ${partes.join(' e ')}.`,
+      items: [...projs.map(p=>p.name), ...clis.map(c=>c.name)]
+    });
+  }
   await q('DELETE FROM products WHERE id=$1', [req.params.id]);
   send(res, { ok: true });
 });
@@ -437,6 +464,20 @@ router.put('/owners/:id', async (req, res) => {
 });
 
 router.delete('/owners/:id', async (req, res) => {
+  const { rows: [{ tarefas }] }  = await q('SELECT COUNT(*) AS tarefas FROM tasks WHERE owner_id=$1', [req.params.id]);
+  const { rows: projs }          = await q('SELECT name FROM projects WHERE owner_id=$1 LIMIT 5', [req.params.id]);
+  const { rows: [{ usuarios }] } = await q('SELECT COUNT(*) AS usuarios FROM users WHERE owner_id=$1', [req.params.id]);
+  const partes = [];
+  if (+tarefas)      partes.push(`${tarefas} tarefa(s)`);
+  if (projs.length)  partes.push(`${projs.length} projeto(s)`);
+  if (+usuarios)     partes.push(`${usuarios} usuário(s)`);
+  if (partes.length) {
+    return res.status(409).json({
+      error: 'RESPONSAVEL_EM_USO',
+      message: `Não é possível excluir: responsável vinculado a ${partes.join(', ')}. Considere desativá-lo em vez de excluir.`,
+      items: projs.map(p => p.name)
+    });
+  }
   await q('DELETE FROM owners WHERE id=$1', [req.params.id]);
   send(res, { ok: true });
 });
@@ -468,6 +509,18 @@ router.put('/sellers/:id', async (req, res) => {
 });
 
 router.delete('/sellers/:id', async (req, res) => {
+  const { rows: projs } = await q('SELECT name FROM projects WHERE seller_id=$1 LIMIT 5', [req.params.id]);
+  const { rows: clis }  = await q('SELECT name FROM clients  WHERE seller_id=$1 LIMIT 5', [req.params.id]);
+  if (projs.length || clis.length) {
+    const partes = [];
+    if (projs.length) partes.push(`${projs.length} projeto(s)`);
+    if (clis.length)  partes.push(`${clis.length} cliente(s)`);
+    return res.status(409).json({
+      error: 'VENDEDOR_EM_USO',
+      message: `Não é possível excluir: vendedor vinculado a ${partes.join(' e ')}. Considere desativá-lo.`,
+      items: [...projs.map(p=>p.name), ...clis.map(c=>c.name)]
+    });
+  }
   await q('DELETE FROM sellers WHERE id=$1', [req.params.id]);
   send(res, { ok: true });
 });

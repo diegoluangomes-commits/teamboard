@@ -66,7 +66,23 @@ async function api(method, path, body) {
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined
   });
-  return res.json();
+  const data = await res.json();
+  // 409 = conflito de integridade (registro em uso)
+  if (res.status === 409) {
+    const err = new Error(data.message || 'Registro em uso');
+    err.conflict = true;
+    err.items = data.items || [];
+    throw err;
+  }
+  return data;
+}
+
+// Exibe erro de exclusão bloqueada
+function showDeleteError(e) {
+  if (!e.conflict) { showToast('Erro ao excluir: ' + e.message, 'error'); return; }
+  let msg = e.message;
+  if (e.items?.length) msg += '\n\n• ' + e.items.slice(0, 5).join('\n• ');
+  alert('⚠️ ' + msg);
 }
 
 // ── Auth ───────────────────────────────────────────────────
@@ -909,7 +925,14 @@ async function saveProj(){
 }
 async function deleteProj(id){
   if(!canDelete())return;
-  if(!confirm('Excluir projeto?'))return;
+  const proj=projects.find(p=>p.id===id);
+  // Busca quantas tarefas serão apagadas junto
+  let qtd=0;
+  try{ const ts=await api('GET','/tasks?projId='+id); qtd=Array.isArray(ts)?ts.length:0; }catch(e){}
+  const aviso=qtd
+    ? `Excluir o projeto "${proj?.name||''}"?\n\n⚠️ Isso apagará permanentemente ${qtd} tarefa(s) vinculada(s) e seus históricos.\n\nEsta ação não pode ser desfeita.`
+    : `Excluir o projeto "${proj?.name||''}"?`;
+  if(!confirm(aviso))return;
   await api('DELETE','/projects/'+id);
   projects=projects.filter(p=>p.id!==id);
   if(activeProj===id&&projects.length)activeProj=projects[0].id;
@@ -1139,7 +1162,8 @@ async function saveClient(){
   if(editingClient){await api('PUT','/clients/'+editingClient,body);}else{await api('POST','/clients',body);}
   clients=await api('GET','/clients');closeModal();renderClientsTable();updateSelects();
 }
-async function deleteClient(id){if(!canDelete())return;if(!confirm('Excluir cliente?'))return;await api('DELETE','/clients/'+id);clients=clients.filter(c=>c.id!==id);renderClientsTable();}
+async function deleteClient(id){if(!canDelete())return;if(!confirm('Excluir cliente?'))return;
+  try{await api('DELETE','/clients/'+id);clients=clients.filter(c=>c.id!==id);renderClientsTable();}catch(e){showDeleteError(e);}}
 
 // ── Products ───────────────────────────────────────────────
 function renderProductsTable(){
@@ -1171,7 +1195,8 @@ async function saveProduct(){
   if(editingProduct){await api('PUT','/products/'+editingProduct,body);}else{await api('POST','/products',body);}
   products=await api('GET','/products');closeModal();renderProductsTable();updateSelects();
 }
-async function deleteProduct(id){if(!canDelete())return;if(!confirm('Excluir produto?'))return;await api('DELETE','/products/'+id);products=products.filter(p=>p.id!==id);renderProductsTable();}
+async function deleteProduct(id){if(!canDelete())return;if(!confirm('Excluir produto?'))return;
+  try{await api('DELETE','/products/'+id);products=products.filter(p=>p.id!==id);renderProductsTable();}catch(e){showDeleteError(e);}}
 
 // ── Owners ─────────────────────────────────────────────────
 function renderOwnersTable(){
@@ -1220,7 +1245,8 @@ async function saveOwner(){
   if(editingOwner){await api('PUT','/owners/'+editingOwner,body);}else{await api('POST','/owners',body);}
   owners=await api('GET','/owners');closeModal();renderOwnersTable();updateSelects();
 }
-async function deleteOwner(id){if(!canDelete())return;if(!confirm('Excluir responsável?'))return;await api('DELETE','/owners/'+id);owners=owners.filter(o=>o.id!==id);renderOwnersTable();}
+async function deleteOwner(id){if(!canDelete())return;if(!confirm('Excluir responsável?'))return;
+  try{await api('DELETE','/owners/'+id);owners=owners.filter(o=>o.id!==id);renderOwnersTable();}catch(e){showDeleteError(e);}}
 
 // ── Sellers ────────────────────────────────────────────────
 function renderSellersTable(){
@@ -1256,7 +1282,8 @@ async function saveSeller(){
   if(editingSeller){await api('PUT','/sellers/'+editingSeller,body);}else{await api('POST','/sellers',body);}
   sellers=await api('GET','/sellers');closeModal();renderSellersTable();updateSelects();
 }
-async function deleteSeller(id){if(!canDelete())return;if(!confirm('Excluir vendedor?'))return;await api('DELETE','/sellers/'+id);sellers=sellers.filter(s=>s.id!==id);renderSellersTable();}
+async function deleteSeller(id){if(!canDelete())return;if(!confirm('Excluir vendedor?'))return;
+  try{await api('DELETE','/sellers/'+id);sellers=sellers.filter(s=>s.id!==id);renderSellersTable();}catch(e){showDeleteError(e);}}
 
 // ── Notificações ───────────────────────────────────────────
 function renderNotifs(){
