@@ -176,6 +176,10 @@ async function initDB() {
   await pool.query(`
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS date_start TEXT;
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS date_end   TEXT;
+    ALTER TABLE clients  ADD COLUMN IF NOT EXISTS contact_name TEXT;
+    ALTER TABLE clients  ADD COLUMN IF NOT EXISTS contact_role TEXT;
+    ALTER TABLE clients  ADD COLUMN IF NOT EXISTS phone        TEXT;
+    ALTER TABLE clients  ADD COLUMN IF NOT EXISTS email        TEXT;
   `).catch(()=>{});
 
   // ── Migration: tabela de status diário de agendas ──

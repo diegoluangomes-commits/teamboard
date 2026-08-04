@@ -114,7 +114,9 @@ const toTask = r => r ? ({
 const toClient = r => r ? ({
   id: r.id, name: r.name, classification: r.classification,
   productId: r.product_id, date: r.date||'',
-  sellerId: r.seller_id, notes: r.notes||''
+  sellerId: r.seller_id, notes: r.notes||'',
+  contactName: r.contact_name||'', contactRole: r.contact_role||'',
+  phone: r.phone||'', email: r.email||''
 }) : null;
 
 const toProduct = r => r ? ({
@@ -353,20 +355,20 @@ router.get('/clients', async (req, res) => {
 });
 
 router.post('/clients', async (req, res) => {
-  const { name, classification, productId, date, sellerId, notes } = req.body;
+  const { name, classification, productId, date, sellerId, notes, contactName, contactRole, phone, email } = req.body;
   const id = uuidv4();
   const { rows } = await q(
-    'INSERT INTO clients (id,name,classification,product_id,date,seller_id,notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-    [id, name, classification||'Ouro', productId||null, date||'', sellerId||null, notes||'']
+    'INSERT INTO clients (id,name,classification,product_id,date,seller_id,notes,contact_name,contact_role,phone,email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+    [id, name, classification||'Ouro', productId||null, date||'', sellerId||null, notes||'', contactName||'', contactRole||'', phone||'', email||'']
   );
   send(res, toClient(rows[0]));
 });
 
 router.put('/clients/:id', async (req, res) => {
-  const { name, classification, productId, date, sellerId, notes } = req.body;
+  const { name, classification, productId, date, sellerId, notes, contactName, contactRole, phone, email } = req.body;
   const { rows } = await q(
-    'UPDATE clients SET name=$1,classification=$2,product_id=$3,date=$4,seller_id=$5,notes=$6 WHERE id=$7 RETURNING *',
-    [name, classification||'Ouro', productId||null, date||'', sellerId||null, notes||'', req.params.id]
+    'UPDATE clients SET name=$1,classification=$2,product_id=$3,date=$4,seller_id=$5,notes=$6,contact_name=$7,contact_role=$8,phone=$9,email=$10 WHERE id=$11 RETURNING *',
+    [name, classification||'Ouro', productId||null, date||'', sellerId||null, notes||'', contactName||'', contactRole||'', phone||'', email||'', req.params.id]
   );
   if (!rows.length) return notFound(res,'Cliente');
   send(res, toClient(rows[0]));

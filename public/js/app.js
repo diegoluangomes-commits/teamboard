@@ -1066,7 +1066,12 @@ function sortClients(col){
 function renderClientsTable(){
   const tb=$('clients-tb');if(!tb)return;
   const search=($('client-search')?.value||'').toLowerCase().trim();
-  const filtered=search?clients.filter(c=>(c.name||'').toLowerCase().includes(search)):clients;
+  const filtered=search?clients.filter(c=>
+    (c.name||'').toLowerCase().includes(search)||
+    (c.contactName||'').toLowerCase().includes(search)||
+    (c.phone||'').toLowerCase().includes(search)||
+    (c.email||'').toLowerCase().includes(search)
+  ):clients;
   const sorted=filtered.slice().sort((a,b)=>{
     let va='',vb='';
     if(clientSort.col==='name'){va=a.name||'';vb=b.name||'';}
@@ -1080,6 +1085,9 @@ function renderClientsTable(){
     <td>${esc(c.name)}</td>
     <td><span class="pill class-${c.classification}">${c.classification}</span></td>
     <td>${esc(productById(c.productId)?.name||'—')}</td>
+    <td style="font-size:11px">${c.contactName?`${esc(c.contactName)}${c.contactRole?`<div style="font-size:10px;color:var(--text3)">${esc(c.contactRole)}</div>`:''}`:'—'}</td>
+    <td class="dc" style="font-size:11px">${c.phone?esc(c.phone):'—'}</td>
+    <td class="dc" style="font-size:11px">${c.email?esc(c.email):'—'}</td>
     <td class="dc">${fd(c.date)}</td>
     <td>${esc(sellerById(c.sellerId)?.name||'—')}</td>
     <td><button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteClient('${c.id}')">×</button></td>
@@ -1104,6 +1112,19 @@ function clientHTML(c){
       <div class="fr"><label>Vendedor</label><select id="c-seller"></select></div>
     </div>
     <div class="fr"><label>Data de entrada</label><input type="date" id="c-date" value="${c?.date||''}"/></div>
+
+    <div class="section-sep"></div>
+    <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;font-weight:500;margin-bottom:9px">👤 Contato</div>
+    <div class="f2">
+      <div class="fr" style="flex:2"><label>Nome do contato</label><input id="c-contact-name" value="${esc(c?.contactName||'')}" placeholder="Ex: Maria Silva"/></div>
+      <div class="fr"><label>Cargo / Função</label><input id="c-contact-role" value="${esc(c?.contactRole||'')}" placeholder="Ex: Sócia, Contadora"/></div>
+    </div>
+    <div class="f2">
+      <div class="fr"><label>Telefone</label><input id="c-phone" value="${esc(c?.phone||'')}" placeholder="(91) 98888-8888"/></div>
+      <div class="fr"><label>E-mail</label><input type="email" id="c-email" value="${esc(c?.email||'')}" placeholder="contato@empresa.com"/></div>
+    </div>
+    <div class="section-sep"></div>
+
     <div class="fr"><label>Observações</label><textarea id="c-notes">${esc(c?.notes||'')}</textarea></div>
     <div class="ma"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveClient()">Salvar cliente</button></div>
   </div>`;
@@ -1112,7 +1133,9 @@ function openClientModal(){editingClient=null;showModal(clientHTML(null));}
 function editClient(id){const c=clients.find(x=>x.id===id);if(!c)return;editingClient=id;showModal(clientHTML(c));setTimeout(()=>{if($('c-product'))$('c-product').value=c.productId||'';if($('c-seller'))$('c-seller').value=c.sellerId||'';},50);}
 async function saveClient(){
   const name=$('c-name').value.trim();if(!name)return;
-  const body={name,classification:$('c-class').value,productId:$('c-product').value||null,date:$('c-date').value,sellerId:$('c-seller').value||null,notes:$('c-notes').value};
+  const body={name,classification:$('c-class').value,productId:$('c-product').value||null,date:$('c-date').value,sellerId:$('c-seller').value||null,notes:$('c-notes').value,
+    contactName:$('c-contact-name')?.value||'',contactRole:$('c-contact-role')?.value||'',
+    phone:$('c-phone')?.value||'',email:$('c-email')?.value||''};
   if(editingClient){await api('PUT','/clients/'+editingClient,body);}else{await api('POST','/clients',body);}
   clients=await api('GET','/clients');closeModal();renderClientsTable();updateSelects();
 }
