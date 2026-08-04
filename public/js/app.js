@@ -74,11 +74,18 @@ async function api(method, path, body) {
     err.items = data.items || [];
     throw err;
   }
+  // 403 = sem permissão para a ação
+  if (res.status === 403) {
+    const err = new Error(data.message || 'Você não tem permissão para esta ação.');
+    err.forbidden = true;
+    throw err;
+  }
   return data;
 }
 
 // Exibe erro de exclusão bloqueada
 function showDeleteError(e) {
+  if (e.forbidden) { showToast('🔒 ' + e.message, 'error'); return; }
   if (!e.conflict) { showToast('Erro ao excluir: ' + e.message, 'error'); return; }
   let msg = e.message;
   if (e.items?.length) msg += '\n\n• ' + e.items.slice(0, 5).join('\n• ');
@@ -648,7 +655,7 @@ function taskHTML(t) {
     <div class="ma"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveTask()">Salvar tarefa</button></div>
   </div>`;
 }
-function openTaskModal(gi=0){editingTask=null;showModal(taskHTML(null));$('f-group').value=gi;}
+function openTaskModal(gi=0){editingTask=null;showModal(taskHTML(null));$('f-group').value=gi;lockOwnerForResponsavel();}
 function openEditTask(id){
   const t=tasks.find(x=>x.id===id)||allCalTasks.find(x=>x.id===id);
   if(!t)return;
@@ -662,6 +669,17 @@ function openEditTask(id){
   pendingMeet=t.meet?{...t.meet}:null;
   showModal(taskHTML(t));
   if($('f-owner'))$('f-owner').value=t.ownerId||'';
+  lockOwnerForResponsavel();
+}
+
+// Responsável não pode reatribuir tarefa para outra pessoa
+function lockOwnerForResponsavel(){
+  if(currentUser?.perfil!=='responsavel')return;
+  const sel=$('f-owner');if(!sel)return;
+  sel.value=currentUser.ownerId||'';
+  sel.disabled=true;
+  sel.style.opacity='.7';
+  sel.title='Você só pode criar/editar tarefas atribuídas a você';
 }
 
 async function submitComment(){
@@ -750,7 +768,10 @@ async function saveTask(){
   const dateEnd=$('f-date-end').value||'';
   const date=dateEnd||dateStart||$('f-date').value||'';
   const turno=document.querySelector('input[name="f-turno"]:checked')?.value||'manha';
-  const newOwnerId=$('f-owner').value;
+  // Responsável sempre salva a tarefa em seu próprio nome
+  const newOwnerId=currentUser?.perfil==='responsavel'
+    ? (currentUser.ownerId||$('f-owner').value)
+    : $('f-owner').value;
   const oldTask=editingTask?tasks.find(x=>x.id===editingTask)||allCalTasks.find(x=>x.id===editingTask):null;
   const isNew=!editingTask;
   const ownerChanged=oldTask&&oldTask.ownerId!==newOwnerId;

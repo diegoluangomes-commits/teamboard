@@ -200,3 +200,6 @@ td { padding: 6px 9px; vertical-align: middle; overflow: hidden; text-overflow: 
 /* Perfil Responsável — oculta botões de exclusão e linha de adicionar */
 body.perfil-responsavel .btn-red { display: none !important; }
 body.perfil-responsavel .add-row { display: none !important; }
+
+/* Perfil Responsável — oculta ações de cadastro (somente leitura) */
+body.perfil-responsavel .admin-only { display: none !important; }

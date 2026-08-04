@@ -19,6 +19,55 @@ function requireApiKey(req, res, next) {
   next();
 }
 
+// ── Autorização por perfil ─────────────────────────────────
+// Exige usuário autenticado
+function requireAuth(req, res, next) {
+  if (!req.session?.userId) return res.status(401).json({ error: 'Não autenticado' });
+  next();
+}
+
+// Exige perfil admin — bloqueia Responsável
+function requireAdmin(req, res, next) {
+  if (!req.session?.userId) return res.status(401).json({ error: 'Não autenticado' });
+  if (req.session.userPerfil !== 'admin') {
+    return res.status(403).json({
+      error: 'SEM_PERMISSAO',
+      message: 'Apenas Administradores podem realizar esta ação.'
+    });
+  }
+  next();
+}
+
+// Responsável só manipula tarefas onde ele é o responsável
+async function requireOwnTask(req, res, next) {
+  if (!req.session?.userId) return res.status(401).json({ error: 'Não autenticado' });
+  if (req.session.userPerfil === 'admin') return next();
+  try {
+    const { rows } = await q('SELECT owner_id FROM tasks WHERE id=$1', [req.params.id]);
+    if (!rows.length) return notFound(res, 'Tarefa');
+    if (rows[0].owner_id !== req.session.ownerId) {
+      return res.status(403).json({
+        error: 'SEM_PERMISSAO',
+        message: 'Você só pode alterar tarefas atribuídas a você.'
+      });
+    }
+    next();
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// Responsável só cria tarefa atribuída a si mesmo
+function requireOwnTaskOnCreate(req, res, next) {
+  if (!req.session?.userId) return res.status(401).json({ error: 'Não autenticado' });
+  if (req.session.userPerfil === 'admin') return next();
+  if (req.body.ownerId !== req.session.ownerId) {
+    return res.status(403).json({
+      error: 'SEM_PERMISSAO',
+      message: 'Você só pode criar tarefas atribuídas a você.'
+    });
+  }
+  next();
+}
+
 // ── Rotas de integração externa (autenticação por API Key) ──
 
 // GET /api/ext/projects — lista todos os projetos com clientes
@@ -177,7 +226,7 @@ router.get('/users', async (req, res) => {
   send(res, rows.map(toUser));
 });
 
-router.post('/users', async (req, res) => {
+router.post('/users', requireAdmin, async (req, res) => {
   try {
     const { name, email, password, perfil, ownerId, active } = req.body;
     const id = uuidv4();
@@ -189,7 +238,7 @@ router.post('/users', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/users/:id', async (req, res) => {
+router.put('/users/:id', requireAdmin, async (req, res) => {
   try {
     const { name, email, password, perfil, ownerId, active } = req.body;
     let sql, params;
@@ -220,7 +269,7 @@ router.post('/change-password', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', requireAdmin, async (req, res) => {
   const { rows } = await q('SELECT perfil FROM users WHERE id=$1', [req.params.id]);
   if (rows[0]?.perfil === 'responsavel') return res.status(403).json({ error: 'Usuários com perfil Responsável não podem ser excluídos.' });
   await q('DELETE FROM users WHERE id=$1', [req.params.id]);
@@ -233,7 +282,7 @@ router.get('/projects', async (req, res) => {
   send(res, rows.map(toProject));
 });
 
-router.post('/projects', async (req, res) => {
+router.post('/projects', requireAdmin, async (req, res) => {
   const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas } = req.body;
   const id = uuidv4();
   const { rows } = await q(
@@ -243,7 +292,7 @@ router.post('/projects', async (req, res) => {
   send(res, toProject(rows[0]));
 });
 
-router.put('/projects/:id', async (req, res) => {
+router.put('/projects/:id', requireAdmin, async (req, res) => {
   const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas } = req.body;
   const { rows } = await q(
     'UPDATE projects SET name=$1,color=$2,descr=$3,client_id=$4,product_id=$5,seller_id=$6,owner_id=$7,date_start=$8,date_end=$9,qtd_agendas=$10 WHERE id=$11 RETURNING *',
@@ -253,7 +302,7 @@ router.put('/projects/:id', async (req, res) => {
   send(res, toProject(rows[0]));
 });
 
-router.delete('/projects/:id', async (req, res) => {
+router.delete('/projects/:id', requireAdmin, async (req, res) => {
   // Cascade: remove status diários das tarefas, depois as tarefas, depois o projeto
   await q(`DELETE FROM task_daily_status WHERE task_id IN (SELECT id FROM tasks WHERE proj_id=$1)`, [req.params.id]).catch(()=>{});
   await q('DELETE FROM tasks WHERE proj_id=$1', [req.params.id]);
@@ -262,7 +311,7 @@ router.delete('/projects/:id', async (req, res) => {
 });
 
 // Criar projeto a partir de template
-router.post('/projects/from-template', async (req, res) => {
+router.post('/projects/from-template', requireAdmin, async (req, res) => {
   const { templateId, projectData } = req.body;
   const { rows: trows } = await q('SELECT * FROM templates WHERE id=$1', [templateId]);
   if (!trows.length) return notFound(res, 'Template');
@@ -287,13 +336,28 @@ router.post('/projects/from-template', async (req, res) => {
 // ── Tasks ──────────────────────────────────────────────────
 router.get('/tasks', async (req, res) => {
   const { projId } = req.query;
-  const { rows } = projId
-    ? await q('SELECT * FROM tasks WHERE proj_id=$1 ORDER BY created_at', [projId])
-    : await q('SELECT * FROM tasks ORDER BY created_at');
+  // Responsável só enxerga as próprias tarefas (filtro no servidor, não só na UI)
+  const isResp = req.session?.userPerfil === 'responsavel';
+  const myOwner = req.session?.ownerId;
+  let sql, params;
+  if (projId && isResp && myOwner) {
+    sql = 'SELECT * FROM tasks WHERE proj_id=$1 AND owner_id=$2 ORDER BY created_at';
+    params = [projId, myOwner];
+  } else if (projId) {
+    sql = 'SELECT * FROM tasks WHERE proj_id=$1 ORDER BY created_at';
+    params = [projId];
+  } else if (isResp && myOwner) {
+    sql = 'SELECT * FROM tasks WHERE owner_id=$1 ORDER BY created_at';
+    params = [myOwner];
+  } else {
+    sql = 'SELECT * FROM tasks ORDER BY created_at';
+    params = [];
+  }
+  const { rows } = await q(sql, params);
   send(res, rows.map(toTask));
 });
 
-router.post('/tasks', async (req, res) => {
+router.post('/tasks', requireOwnTaskOnCreate, async (req, res) => {
   const { name, projId, group, status, ownerId, priority, date, dateStart, dateEnd, turno, desc, meet } = req.body;
   const id = uuidv4();
   const { rows } = await q(
@@ -311,7 +375,7 @@ router.get('/tasks/:id', async (req, res) => {
   send(res, toTask(rows[0]));
 });
 
-router.put('/tasks/:id', async (req, res) => {
+router.put('/tasks/:id', requireOwnTask, async (req, res) => {
   const { name, projId, group, status, ownerId, priority, date, dateStart, dateEnd, turno, desc, meet, comments } = req.body;
   const { rows } = await q(
     'UPDATE tasks SET name=$1,proj_id=$2,grp=$3,status=$4,owner_id=$5,priority=$6,date=$7,date_start=$8,date_end=$9,turno=$10,descr=$11,meet=$12,comments=$13 WHERE id=$14 RETURNING *',
@@ -325,7 +389,7 @@ router.put('/tasks/:id', async (req, res) => {
   send(res, toTask(rows[0]));
 });
 
-router.delete('/tasks/:id', async (req, res) => {
+router.delete('/tasks/:id', requireOwnTask, async (req, res) => {
   // Cascade: remove os status diários vinculados
   await q('DELETE FROM task_daily_status WHERE task_id=$1', [req.params.id]).catch(()=>{});
   await q('DELETE FROM tasks WHERE id=$1', [req.params.id]);
@@ -359,7 +423,7 @@ router.get('/clients', async (req, res) => {
   send(res, rows.map(toClient));
 });
 
-router.post('/clients', async (req, res) => {
+router.post('/clients', requireAdmin, async (req, res) => {
   const { name, classification, productId, date, sellerId, notes, contactName, contactRole, phone, email } = req.body;
   const id = uuidv4();
   const { rows } = await q(
@@ -369,7 +433,7 @@ router.post('/clients', async (req, res) => {
   send(res, toClient(rows[0]));
 });
 
-router.put('/clients/:id', async (req, res) => {
+router.put('/clients/:id', requireAdmin, async (req, res) => {
   const { name, classification, productId, date, sellerId, notes, contactName, contactRole, phone, email } = req.body;
   const { rows } = await q(
     'UPDATE clients SET name=$1,classification=$2,product_id=$3,date=$4,seller_id=$5,notes=$6,contact_name=$7,contact_role=$8,phone=$9,email=$10 WHERE id=$11 RETURNING *',
@@ -379,7 +443,7 @@ router.put('/clients/:id', async (req, res) => {
   send(res, toClient(rows[0]));
 });
 
-router.delete('/clients/:id', async (req, res) => {
+router.delete('/clients/:id', requireAdmin, async (req, res) => {
   // Verifica se há projetos vinculados
   const { rows: deps } = await q('SELECT name FROM projects WHERE client_id=$1 LIMIT 5', [req.params.id]);
   if (deps.length) {
@@ -400,7 +464,7 @@ router.get('/products', async (req, res) => {
   send(res, rows.map(toProduct));
 });
 
-router.post('/products', async (req, res) => {
+router.post('/products', requireAdmin, async (req, res) => {
   const { name, desc, active } = req.body;
   const id = uuidv4();
   const { rows } = await q(
@@ -410,7 +474,7 @@ router.post('/products', async (req, res) => {
   send(res, toProduct(rows[0]));
 });
 
-router.put('/products/:id', async (req, res) => {
+router.put('/products/:id', requireAdmin, async (req, res) => {
   const { name, desc, active } = req.body;
   const { rows } = await q(
     'UPDATE products SET name=$1,descr=$2,active=$3 WHERE id=$4 RETURNING *',
@@ -420,7 +484,7 @@ router.put('/products/:id', async (req, res) => {
   send(res, toProduct(rows[0]));
 });
 
-router.delete('/products/:id', async (req, res) => {
+router.delete('/products/:id', requireAdmin, async (req, res) => {
   const { rows: projs } = await q('SELECT name FROM projects WHERE product_id=$1 LIMIT 5', [req.params.id]);
   const { rows: clis }  = await q('SELECT name FROM clients  WHERE product_id=$1 LIMIT 5', [req.params.id]);
   if (projs.length || clis.length) {
@@ -443,7 +507,7 @@ router.get('/owners', async (req, res) => {
   send(res, rows.map(toOwner));
 });
 
-router.post('/owners', async (req, res) => {
+router.post('/owners', requireAdmin, async (req, res) => {
   const { name, email, color, initials, active } = req.body;
   const id = uuidv4();
   const { rows } = await q(
@@ -453,7 +517,7 @@ router.post('/owners', async (req, res) => {
   send(res, toOwner(rows[0]));
 });
 
-router.put('/owners/:id', async (req, res) => {
+router.put('/owners/:id', requireAdmin, async (req, res) => {
   const { name, email, color, initials, active } = req.body;
   const { rows } = await q(
     'UPDATE owners SET name=$1,email=$2,color=$3,initials=$4,active=$5 WHERE id=$6 RETURNING *',
@@ -463,7 +527,7 @@ router.put('/owners/:id', async (req, res) => {
   send(res, toOwner(rows[0]));
 });
 
-router.delete('/owners/:id', async (req, res) => {
+router.delete('/owners/:id', requireAdmin, async (req, res) => {
   const { rows: [{ tarefas }] }  = await q('SELECT COUNT(*) AS tarefas FROM tasks WHERE owner_id=$1', [req.params.id]);
   const { rows: projs }          = await q('SELECT name FROM projects WHERE owner_id=$1 LIMIT 5', [req.params.id]);
   const { rows: [{ usuarios }] } = await q('SELECT COUNT(*) AS usuarios FROM users WHERE owner_id=$1', [req.params.id]);
@@ -488,7 +552,7 @@ router.get('/sellers', async (req, res) => {
   send(res, rows.map(toSeller));
 });
 
-router.post('/sellers', async (req, res) => {
+router.post('/sellers', requireAdmin, async (req, res) => {
   const { name, email, phone, active } = req.body;
   const id = uuidv4();
   const { rows } = await q(
@@ -498,7 +562,7 @@ router.post('/sellers', async (req, res) => {
   send(res, toSeller(rows[0]));
 });
 
-router.put('/sellers/:id', async (req, res) => {
+router.put('/sellers/:id', requireAdmin, async (req, res) => {
   const { name, email, phone, active } = req.body;
   const { rows } = await q(
     'UPDATE sellers SET name=$1,email=$2,phone=$3,active=$4 WHERE id=$5 RETURNING *',
@@ -508,7 +572,7 @@ router.put('/sellers/:id', async (req, res) => {
   send(res, toSeller(rows[0]));
 });
 
-router.delete('/sellers/:id', async (req, res) => {
+router.delete('/sellers/:id', requireAdmin, async (req, res) => {
   const { rows: projs } = await q('SELECT name FROM projects WHERE seller_id=$1 LIMIT 5', [req.params.id]);
   const { rows: clis }  = await q('SELECT name FROM clients  WHERE seller_id=$1 LIMIT 5', [req.params.id]);
   if (projs.length || clis.length) {
@@ -531,7 +595,7 @@ router.get('/templates', async (req, res) => {
   send(res, rows.map(toTemplate));
 });
 
-router.post('/templates', async (req, res) => {
+router.post('/templates', requireAdmin, async (req, res) => {
   const { name, desc, tasks } = req.body;
   const id = uuidv4();
   const { rows } = await q(
@@ -541,7 +605,7 @@ router.post('/templates', async (req, res) => {
   send(res, toTemplate(rows[0]));
 });
 
-router.put('/templates/:id', async (req, res) => {
+router.put('/templates/:id', requireAdmin, async (req, res) => {
   const { name, desc, tasks } = req.body;
   const { rows } = await q(
     'UPDATE templates SET name=$1,descr=$2,tasks=$3 WHERE id=$4 RETURNING *',
@@ -551,7 +615,7 @@ router.put('/templates/:id', async (req, res) => {
   send(res, toTemplate(rows[0]));
 });
 
-router.delete('/templates/:id', async (req, res) => {
+router.delete('/templates/:id', requireAdmin, async (req, res) => {
   await q('DELETE FROM templates WHERE id=$1', [req.params.id]);
   send(res, { ok: true });
 });
@@ -619,7 +683,7 @@ router.get('/ausencias', async (req, res) => {
   send(res, rows.map(r=>({ id:r.id, ownerId:r.owner_id, tipo:r.tipo, dateStart:r.date_start, dateEnd:r.date_end, obs:r.obs||'' })));
 });
 
-router.post('/ausencias', async (req, res) => {
+router.post('/ausencias', requireAdmin, async (req, res) => {
   const { ownerId, tipo, dateStart, dateEnd, obs } = req.body;
   const id = uuidv4();
   const { rows } = await q(
@@ -629,7 +693,7 @@ router.post('/ausencias', async (req, res) => {
   send(res, { id:rows[0].id, ownerId:rows[0].owner_id, tipo:rows[0].tipo, dateStart:rows[0].date_start, dateEnd:rows[0].date_end, obs:rows[0].obs||'' });
 });
 
-router.put('/ausencias/:id', async (req, res) => {
+router.put('/ausencias/:id', requireAdmin, async (req, res) => {
   const { ownerId, tipo, dateStart, dateEnd, obs } = req.body;
   const { rows } = await q(
     'UPDATE ausencias SET owner_id=$1,tipo=$2,date_start=$3,date_end=$4,obs=$5 WHERE id=$6 RETURNING *',
@@ -639,7 +703,7 @@ router.put('/ausencias/:id', async (req, res) => {
   send(res, { id:rows[0].id, ownerId:rows[0].owner_id, tipo:rows[0].tipo, dateStart:rows[0].date_start, dateEnd:rows[0].date_end, obs:rows[0].obs||'' });
 });
 
-router.delete('/ausencias/:id', async (req, res) => {
+router.delete('/ausencias/:id', requireAdmin, async (req, res) => {
   await q('DELETE FROM ausencias WHERE id=$1', [req.params.id]);
   send(res, { ok: true });
 });
@@ -660,6 +724,14 @@ router.get('/task-daily-status', async (req, res) => {
 router.post('/task-daily-status', async (req, res) => {
   const { taskId, date, status } = req.body;
   if(!taskId || !date || !status) return send(res, { ok: false, error: 'taskId, date e status são obrigatórios' });
+  // Responsável só marca as próprias agendas
+  if (req.session?.userPerfil === 'responsavel') {
+    const { rows } = await q('SELECT owner_id FROM tasks WHERE id=$1', [taskId]);
+    if (!rows.length) return notFound(res, 'Tarefa');
+    if (rows[0].owner_id !== req.session.ownerId) {
+      return res.status(403).json({ error:'SEM_PERMISSAO', message:'Você só pode alterar agendas atribuídas a você.' });
+    }
+  }
   await q(
     `INSERT INTO task_daily_status (task_id, date, status, updated_at)
      VALUES ($1, $2, $3, NOW())
