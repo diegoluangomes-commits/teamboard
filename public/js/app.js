@@ -67,6 +67,26 @@ async function api(method, path, body) {
     body: body ? JSON.stringify(body) : undefined
   });
   const data = await res.json();
+  // 401 = sessão expirada ou inexistente → volta para o login
+  if (res.status === 401 && !path.startsWith('/login')) {
+    const ls = document.getElementById('login-screen');
+    if (ls) {
+      ls.style.display = 'flex';
+      const app = document.getElementById('app-wrap') || document.querySelector('.layout');
+      if (app) app.style.display = 'none';
+      if (typeof showToast === 'function') showToast('Sessão expirada. Faça login novamente.', 'error');
+    } else {
+      location.reload();
+    }
+    throw new Error('Não autenticado');
+  }
+  // 429 = excedeu o limite de requisições
+  if (res.status === 429) {
+    const err = new Error(data.error || 'Muitas requisições. Aguarde um momento.');
+    err.rateLimited = true;
+    showToast('⏳ ' + err.message, 'error');
+    throw err;
+  }
   // 409 = conflito de integridade (registro em uso)
   if (res.status === 409) {
     const err = new Error(data.message || 'Registro em uso');

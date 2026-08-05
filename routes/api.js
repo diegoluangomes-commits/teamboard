@@ -1,7 +1,8 @@
 const express  = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { pool }  = require('../db');
-const nodemailer = require('nodemailer');  // ← linha 4
+const nodemailer = require('nodemailer');
+const bcrypt    = require('bcryptjs');
 const router    = express.Router();
 
 const send     = (res, data) => res.json(data);
@@ -25,6 +26,17 @@ function requireAuth(req, res, next) {
   if (!req.session?.userId) return res.status(401).json({ error: 'Não autenticado' });
   next();
 }
+
+// Rotas liberadas sem sessão: login, integração externa (protegida por API key)
+const ROTAS_PUBLICAS = ['/login', '/logout-local'];
+
+// Trava global: qualquer rota não listada acima exige sessão ativa.
+// Rotas /ext/* usam x-api-key e são validadas pelo requireApiKey.
+router.use((req, res, next) => {
+  if (ROTAS_PUBLICAS.includes(req.path)) return next();
+  if (req.path.startsWith('/ext/'))      return next();
+  return requireAuth(req, res, next);
+});
 
 // Exige perfil admin — bloqueia Responsável
 function requireAdmin(req, res, next) {
@@ -166,14 +178,35 @@ const toTemplate = r => r ? ({
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const { rows } = await q('SELECT * FROM users WHERE email=$1 AND password=$2 AND active=true', [email, password]);
+    if (!email || !password) return res.status(400).json({ error: 'E-mail e senha são obrigatórios' });
+
+    const { rows } = await q('SELECT * FROM users WHERE email=$1 AND active=true', [email]);
+    // Mensagem genérica: não revela se o e-mail existe
     if (!rows.length) return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+
     const user = rows[0];
-    req.session.userId    = user.id;
-    req.session.userPerfil = user.perfil;
-    req.session.userName  = user.name;
-    req.session.ownerId   = user.owner_id;
-    send(res, { ok: true, user: toUser(user) });
+    let ok = false;
+    if (user.password && user.password.startsWith('$2')) {
+      ok = await bcrypt.compare(password, user.password);
+    } else {
+      // Senha ainda em texto puro: valida e converte para hash na hora
+      ok = user.password === password;
+      if (ok) {
+        const hash = await bcrypt.hash(password, 10);
+        await q('UPDATE users SET password=$1 WHERE id=$2', [hash, user.id]);
+      }
+    }
+    if (!ok) return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+
+    // Renova o ID da sessão no login (previne session fixation)
+    req.session.regenerate(err => {
+      if (err) return res.status(500).json({ error: 'Erro ao criar sessão' });
+      req.session.userId     = user.id;
+      req.session.userPerfil = user.perfil;
+      req.session.userName   = user.name;
+      req.session.ownerId    = user.owner_id;
+      send(res, { ok: true, user: toUser(user) });
+    });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -184,7 +217,7 @@ router.post('/logout-local', (req, res) => {
 router.get('/me', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Não autenticado' });
   try {
-    const { rows } = await q('SELECT * FROM users WHERE id=$1', [req.session.userId]);
+    const { rows } = await q('SELECT id,name,email,perfil,owner_id,active FROM users WHERE id=$1', [req.session.userId]);
     if (!rows.length) return res.status(401).json({ error: 'Usuário não encontrado' });
     send(res, toUser(rows[0]));
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -192,17 +225,19 @@ router.get('/me', async (req, res) => {
 
 // ── Users ──────────────────────────────────────────────────
 router.get('/users', async (req, res) => {
-  const { rows } = await q('SELECT * FROM users ORDER BY name');
+  const { rows } = await q('SELECT id,name,email,perfil,owner_id,active FROM users ORDER BY name');
   send(res, rows.map(toUser));
 });
 
 router.post('/users', requireAdmin, async (req, res) => {
   try {
     const { name, email, password, perfil, ownerId, active } = req.body;
+    if (!password || password.length < 6) return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
     const id = uuidv4();
+    const hash = await bcrypt.hash(password, 10);
     const { rows } = await q(
       'INSERT INTO users (id,name,email,password,perfil,owner_id,active) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-      [id, name, email, password, perfil||'responsavel', ownerId||null, active!==false]
+      [id, name, email, hash, perfil||'responsavel', ownerId||null, active!==false]
     );
     send(res, toUser(rows[0]));
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -213,8 +248,10 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
     const { name, email, password, perfil, ownerId, active } = req.body;
     let sql, params;
     if (password) {
+      if (password.length < 6) return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
+      const hash = await bcrypt.hash(password, 10);
       sql = 'UPDATE users SET name=$1,email=$2,password=$3,perfil=$4,owner_id=$5,active=$6 WHERE id=$7 RETURNING *';
-      params = [name, email, password, perfil, ownerId||null, active!==false, req.params.id];
+      params = [name, email, hash, perfil, ownerId||null, active!==false, req.params.id];
     } else {
       sql = 'UPDATE users SET name=$1,email=$2,perfil=$3,owner_id=$4,active=$5 WHERE id=$6 RETURNING *';
       params = [name, email, perfil, ownerId||null, active!==false, req.params.id];
@@ -232,9 +269,13 @@ router.post('/change-password', async (req, res) => {
     const { rows } = await q('SELECT * FROM users WHERE id=$1', [req.session.userId]);
     if (!rows.length) return res.status(404).json({ error: 'Usuário não encontrado' });
     const user = rows[0];
-    if (user.password !== oldPassword) return res.status(400).json({ error: 'Senha atual incorreta' });
+    const atualOk = user.password?.startsWith('$2')
+      ? await bcrypt.compare(oldPassword, user.password)
+      : user.password === oldPassword;
+    if (!atualOk) return res.status(400).json({ error: 'Senha atual incorreta' });
     if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres' });
-    await q('UPDATE users SET password=$1 WHERE id=$2', [newPassword, req.session.userId]);
+    const novoHash = await bcrypt.hash(newPassword, 10);
+    await q('UPDATE users SET password=$1 WHERE id=$2', [novoHash, req.session.userId]);
     send(res, { ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

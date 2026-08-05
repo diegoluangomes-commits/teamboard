@@ -193,6 +193,37 @@ async function initDB() {
     );
   `).catch(()=>{});
 
+  // ── Índices: aceleram os filtros mais usados ──
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_tasks_proj      ON tasks(proj_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_owner     ON tasks(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_date      ON tasks(date);
+    CREATE INDEX IF NOT EXISTS idx_tasks_datestart ON tasks(date_start);
+    CREATE INDEX IF NOT EXISTS idx_tasks_status    ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
+    CREATE INDEX IF NOT EXISTS idx_projects_owner  ON projects(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_clients_seller  ON clients(seller_id);
+    CREATE INDEX IF NOT EXISTS idx_ausencias_owner ON ausencias(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_tds_date        ON task_daily_status(date);
+    CREATE INDEX IF NOT EXISTS idx_users_email     ON users(email);
+  `).catch(e => console.warn('[DB] Aviso ao criar índices:', e.message));
+
+  // ── Migration: criptografa senhas ainda em texto puro ──
+  // Hashes bcrypt começam com $2a$/$2b$/$2y$ — tudo diferente disso é texto puro
+  try {
+    const bcrypt = require('bcryptjs');
+    const { rows: planas } = await pool.query(
+      `SELECT id, password FROM users WHERE password IS NOT NULL AND password NOT LIKE '$2%'`
+    );
+    for (const u of planas) {
+      const hash = await bcrypt.hash(u.password, 10);
+      await pool.query('UPDATE users SET password=$1 WHERE id=$2', [hash, u.id]);
+    }
+    if (planas.length) console.log(`[DB] ${planas.length} senha(s) criptografada(s) com bcrypt.`);
+  } catch (e) {
+    console.warn('[DB] Aviso na migração de senhas:', e.message);
+  }
+
   console.log('[DB] PostgreSQL conectado e tabelas prontas.');
 }
 
