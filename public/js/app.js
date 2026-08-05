@@ -648,10 +648,34 @@ function taskHTML(t) {
       <div class="cir"><textarea id="new-cmt" placeholder="Escrever comentário..." onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();submitComment();}"></textarea>
       <button class="btn btn-blue" onclick="submitComment()" style="height:44px;flex-shrink:0" title="Enviar (Ctrl+Enter)">Enviar</button></div>
     </div>`:''}
-    <div class="ma"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveTask()">Salvar tarefa</button></div>
+    <div class="ma">
+      ${t?`<button class="btn btn-purple" onclick="duplicateTask()" style="margin-right:auto" title="Cria uma cópia desta tarefa para outra data">⧉ Duplicar</button>`:''}
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-blue" onclick="saveTask()">Salvar tarefa</button>
+    </div>
   </div>`;
 }
 function openTaskModal(gi=0){editingTask=null;showModal(taskHTML(null));$('f-group').value=gi;}
+
+// Duplica a tarefa aberta — mantém os dados e limpa as datas para o novo dia
+function duplicateTask(){
+  if(!editingTask)return;
+  // Sai do modo edição: o próximo "Salvar" cria um registro novo
+  editingTask=null;
+  pendingMeet=null; // a cópia não herda a reunião do Meet original
+  // Mantém todos os campos preenchidos, apenas zera as datas
+  ['f-date-start','f-date-end','f-date'].forEach(id=>{const el=$(id);if(el)el.value='';});
+  // Ajusta o título e o rodapé do modal para refletir a cópia
+  const h3=document.querySelector('#modal-area h3');
+  if(h3)h3.textContent='Duplicar tarefa';
+  const btnDup=document.querySelector('.btn-purple[onclick="duplicateTask()"]');
+  if(btnDup)btnDup.remove();
+  // Remove a seção de comentários (a cópia começa sem histórico)
+  const cmt=document.querySelector('#modal-area .cmt-section');
+  if(cmt)cmt.remove();
+  showToast('⧉ Cópia criada — informe a nova data e salve','success');
+  const ds=$('f-date-start');if(ds)ds.focus();
+}
 function openEditTask(id){
   const t=tasks.find(x=>x.id===id)||allCalTasks.find(x=>x.id===id);
   if(!t)return;
