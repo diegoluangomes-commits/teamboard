@@ -1365,8 +1365,39 @@ function getFeriados(year){
 }
 
 let allCalTasks=[];
+let taskDailyStatus = {}; // { "taskId|YYYY-MM-DD": "done"|"pending" }
+
 async function loadAllTasksForCal(){
   allCalTasks=await api('GET','/tasks');
+  // Carrega status diários do mês atual e adjacentes
+  const months=[
+    `${calY}-${String(calM).padStart(2,'0')}`,
+    `${calY}-${String(calM+1).padStart(2,'0')}`,
+    `${calY}-${String(calM+2).padStart(2,'0')}`
+  ];
+  taskDailyStatus={};
+  for(const m of months){
+    try{
+      const rows=await api('GET',`/task-daily-status?month=${m}`);
+      if(Array.isArray(rows)) rows.forEach(r=>{ taskDailyStatus[r.taskId+'|'+r.date]=r.status; });
+    }catch(e){}
+  }
+}
+
+async function loadDailyStatusForMonth(y, m){
+  const monthStr=`${y}-${String(m+1).padStart(2,'0')}`;
+  try{
+    const rows=await api('GET',`/task-daily-status?month=${monthStr}`);
+    if(Array.isArray(rows)) rows.forEach(r=>{ taskDailyStatus[r.taskId+'|'+r.date]=r.status; });
+  }catch(e){}
+}
+
+function getDailyStatus(taskId, dateStr){
+  return taskDailyStatus[taskId+'|'+dateStr]||null;
+}
+
+function hasPeriod(t){
+  return t.dateStart && t.dateEnd && t.dateStart !== t.dateEnd;
 }
 
 function calFilteredTasks(){
@@ -1621,23 +1652,47 @@ function calRenderDayList(ft, day){
     const ownerColor=o.color||'#888';
     const turnoIcon=t.turno==='tarde'?'🌙':'☀️';
     const turnoLabel=t.turno==='tarde'?'Tarde':'Manhã';
-    return `<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);transition:background .1s;${t.status==='done'?'opacity:.75':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+
+    // Para tarefas com período, usa status do dia específico; para dia único usa status da tarefa
+    const isPeriod=hasPeriod(t);
+    // dateStr do dia sendo exibido
+    let dateStr='';
+    if(day){
+      dateStr=`${calY}-${String(calM+1).padStart(2,'0')}-${day.padStart(2,'0')}`;
+    } else {
+      // na visão "todos os dias", usa a data de início da tarefa como referência
+      dateStr=t.dateStart||t.date||'';
+    }
+    const dailySt=isPeriod?getDailyStatus(t.id, dateStr):null;
+    const effectiveStatus=isPeriod?(dailySt||'pending'):t.status;
+    const isDone=effectiveStatus==='done';
+
+    // id do checkbox inclui a data para tarefas com período
+    const checkId=isPeriod?`cal-check-${t.id}--${dateStr}`:`cal-check-${t.id}`;
+    const pillId=isPeriod?`cal-pill-${t.id}--${dateStr}`:`cal-pill-${t.id}`;
+    const nameId=isPeriod?`${t.id}--${dateStr}`:t.id;
+    const onclick=isPeriod
+      ?`event.stopPropagation();toggleDoneCalTask('${t.id}','${dateStr}')`
+      :`event.stopPropagation();toggleDoneCalTask('${t.id}')`;
+
+    return `<div data-task-id="${t.id}" data-date="${dateStr}" style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);transition:background .1s;${isDone?'opacity:.75':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
       <div style="width:3px;height:40px;border-radius:2px;background:${ownerColor};flex-shrink:0"></div>
-      <div onclick="event.stopPropagation();toggleDoneCalTask('${t.id}')" title="${t.status==='done'?'Marcar como pendente':'Marcar como realizado'}"
-        style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${t.status==='done'?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${t.status==='done'?'#3B6D11':'transparent'};flex-shrink:0">
-        ${t.status==='done'?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+      <div id="${checkId}" onclick="${onclick}" title="${isDone?'Marcar como pendente':'Marcar como realizado'}"
+        style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${isDone?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${isDone?'#3B6D11':'transparent'};flex-shrink:0">
+        ${isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
       </div>
       <div style="flex:1;min-width:0;cursor:pointer" onclick="openEditTask('${t.id}')">
-        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${t.status==='done'?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</div>
+        <div data-task-name="${nameId}" style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${isDone?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:6px">
           <span>${esc(proj.name||'')}</span>
           ${cli.name?`<span style="background:#EEEDFE;color:#3C3489;padding:0 4px;border-radius:3px;font-size:10px">${esc(cli.name)}</span>`:''}
           <span style="color:var(--text3)">${g.name}</span>
+          ${isPeriod?`<span style="background:#F1EFEA;color:#6b6b67;padding:0 4px;border-radius:3px;font-size:9px">📅 ${fd(dateStr)}</span>`:''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
         <span style="font-size:11px;background:${t.turno==='tarde'?'#E6F1FB':'#FAEEDA'};color:${t.turno==='tarde'?'#0C447C':'#854F0B'};padding:2px 7px;border-radius:8px;font-weight:500">${turnoIcon} ${turnoLabel}</span>
-        <span class="pill ${SM[t.status].c}" style="font-size:10px">${SM[t.status].l}</span>
+        <span id="${pillId}" class="pill ${SM[effectiveStatus]?.c||SM['pending'].c}" style="font-size:10px">${SM[effectiveStatus]?.l||SM['pending'].l}</span>
         <span style="font-size:11px;color:var(--text2)">${periodo}</span>
         <div class="av" style="background:${ownerColor};color:#fff;font-size:9px;width:24px;height:24px" title="${esc(o.name||'')}">${o.initials||'?'}</div>
       </div>
@@ -1649,19 +1704,61 @@ function calNav(d){
   calM+=d;
   if(calM>11){calM=0;calY++;}
   else if(calM<0){calM=11;calY--;}
-  renderCalendar();
+  loadDailyStatusForMonth(calY, calM).then(renderCalendar);
 }
 
-async function toggleDoneCalTask(id){
+async function toggleDoneCalTask(id, dateStr){
   const t=allCalTasks.find(x=>x.id===id)||tasks.find(x=>x.id===id);
   if(!t)return;
-  const newStatus=t.status==='done'?'pending':'done';
-  await api('PUT','/tasks/'+id,{...t,status:newStatus});
-  // Atualiza nos dois arrays
-  if(allCalTasks.find(x=>x.id===id)) allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:newStatus}:x);
-  if(tasks.find(x=>x.id===id)) tasks=tasks.map(x=>x.id===id?{...x,status:newStatus}:x);
-  renderCalendar();
-  showToast(newStatus==='done'?'✅ Agenda marcada como realizada!':'↩️ Agenda desmarcada','success');
+
+  const isPeriod=hasPeriod(t);
+
+  if(isPeriod && dateStr){
+    // ── Tarefa com período: grava status só para o dia clicado ──
+    const current=getDailyStatus(id, dateStr)||'pending';
+    const newStatus=current==='done'?'pending':'done';
+    const isDone=newStatus==='done';
+    await api('POST','/task-daily-status',{taskId:id, date:dateStr, status:newStatus});
+    taskDailyStatus[id+'|'+dateStr]=newStatus;
+    // Atualiza DOM cirurgicamente
+    const checkId=`cal-check-${id}--${dateStr}`;
+    const chk=document.getElementById(checkId);
+    if(chk){
+      chk.style.borderColor=isDone?'#3B6D11':'#ccc';
+      chk.style.background=isDone?'#3B6D11':'transparent';
+      chk.title=isDone?'Marcar como pendente':'Marcar como realizado';
+      chk.innerHTML=isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':'';
+      const row=chk.closest('[data-task-id]');
+      if(row) row.style.opacity=isDone?'.75':'1';
+      const nameKey=`${id}--${dateStr}`;
+      const name=document.querySelector(`[data-task-name="${nameKey}"]`);
+      if(name){ name.style.textDecoration=isDone?'line-through':'none'; name.style.color=isDone?'var(--text3)':''; }
+      const pill=document.getElementById(`cal-pill-${id}--${dateStr}`);
+      if(pill){ pill.className='pill '+(isDone?SM['done'].c:SM['pending'].c); pill.textContent=isDone?SM['done'].l:SM['pending'].l; }
+    }
+    showToast(isDone?'✅ Realizado no dia '+fd(dateStr)+'!':'↩️ Desmarcado','success');
+  } else {
+    // ── Tarefa de dia único: comportamento original ──
+    const newStatus=t.status==='done'?'pending':'done';
+    const isDone=newStatus==='done';
+    await api('PUT','/tasks/'+id,{...t,status:newStatus});
+    if(allCalTasks.find(x=>x.id===id)) allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:newStatus}:x);
+    if(tasks.find(x=>x.id===id)) tasks=tasks.map(x=>x.id===id?{...x,status:newStatus}:x);
+    const chk=document.getElementById('cal-check-'+id);
+    if(chk){
+      chk.style.borderColor=isDone?'#3B6D11':'#ccc';
+      chk.style.background=isDone?'#3B6D11':'transparent';
+      chk.title=isDone?'Marcar como pendente':'Marcar como realizado';
+      chk.innerHTML=isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':'';
+      const row=chk.closest('[data-task-id]');
+      if(row) row.style.opacity=isDone?'.75':'1';
+      const name=document.querySelector(`[data-task-name="${id}"]`);
+      if(name){ name.style.textDecoration=isDone?'line-through':'none'; name.style.color=isDone?'var(--text3)':''; }
+      const pill=document.getElementById('cal-pill-'+id);
+      if(pill){ pill.className='pill '+(isDone?SM['done'].c:SM['pending'].c); pill.textContent=isDone?SM['done'].l:SM['pending'].l; }
+    }
+    showToast(isDone?'✅ Agenda marcada como realizada!':'↩️ Agenda desmarcada','success');
+  }
 }
 
 // ── Users ──────────────────────────────────────────────────
@@ -1975,7 +2072,152 @@ function renderAgendasOwner(){
   content.innerHTML=html||'<div style="padding:20px;text-align:center;color:var(--text3)">Nenhuma agenda encontrada.</div>';
 }
 
-// ── Controle de Agendas (legado) ───────────────────────────
+// ── Dashboard de Agendas ───────────────────────────────────
+function renderAgendaDash(){
+  const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const content=$('agenda-dash-content');if(!content)return;
+
+  // ── Ano ──
+  const anoSel=$('adash-ano');
+  if(anoSel){
+    const years=[...new Set(allCalTasks.map(t=>(t.dateStart||t.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+    if(!years.length)years.push(new Date().getFullYear().toString());
+    if(!anoSel.value||anoSel.innerHTML.trim()===''){
+      anoSel.innerHTML=years.map(y=>`<option value="${y}">${y}</option>`).join('');
+      anoSel.value=new Date().getFullYear().toString();
+      if(!years.includes(anoSel.value))anoSel.value=years[0];
+    }
+  }
+  const curYear=anoSel?.value||new Date().getFullYear().toString();
+
+  // ── Mês (padrão: mês atual) ──
+  const mesSel=$('adash-mes');
+  if(mesSel&&mesSel.value===''&&!mesSel._defaultSet){
+    mesSel.value=String(new Date().getMonth());
+    mesSel._defaultSet=true;
+  }
+  const filterMes=mesSel?.value!==''&&mesSel?.value!=null?+mesSel.value:-1;
+
+  const yearTasks=allCalTasks.filter(t=>(t.dateStart||t.date||'').startsWith(curYear));
+  const filteredTasks=filterMes>=0
+    ?yearTasks.filter(t=>{const d=t.dateStart||t.date||'';return d&&+d.slice(5,7)-1===filterMes;})
+    :yearTasks;
+
+  const total=filteredTasks.length;
+  const realizadas=filteredTasks.filter(t=>t.status==='done').length;
+  const pendentes=total-realizadas;
+  const pctGeral=total?Math.round(realizadas/total*100):0;
+  const pctColor=pctGeral>=100?'var(--green)':pctGeral>=50?'var(--amber)':'var(--red)';
+
+  // ── Cards ──
+  const cardsHtml=`
+    <div class="sbar" style="margin-bottom:16px">
+      <div class="sc flex1"><div class="slabel">Total Agendadas</div><div class="sval blue">${total}</div></div>
+      <div class="sc flex1"><div class="slabel">Realizadas</div><div class="sval green">${realizadas}</div></div>
+      <div class="sc flex1"><div class="slabel">Pendentes</div><div class="sval amber">${pendentes}</div></div>
+      <div class="sc flex1">
+        <div class="slabel">% Realizado</div>
+        <div class="sval" style="color:${pctColor}">${pctGeral}%</div>
+        <div class="pbar"><div style="height:3px;background:${pctColor};width:${Math.min(pctGeral,100)}%;border-radius:2px"></div></div>
+      </div>
+    </div>`;
+
+  // ── Gráfico por mês (apenas se filtro = todos os meses) ──
+  let chartHtml='';
+  if(filterMes<0){
+    const byMonth=Array.from({length:12},(_,i)=>{
+      const mTasks=yearTasks.filter(t=>{const d=t.dateStart||t.date||'';return d&&+d.slice(5,7)-1===i;});
+      return{label:MONTHS[i].slice(0,3),total:mTasks.length,realizadas:mTasks.filter(t=>t.status==='done').length};
+    });
+    const maxVal=Math.max(...byMonth.map(m=>m.total),1);
+    const barW=52; const gap=8; const chartH=120; const padL=28; const padB=22;
+    const totalW=padL+(barW+gap)*12+gap;
+    const bars=byMonth.map((m,i)=>{
+      const x=padL+gap+(barW+gap)*i;
+      const hTotal=Math.round((m.total/maxVal)*chartH);
+      const hReal=m.total?Math.round((m.realizadas/m.total)*hTotal):0;
+      const yTotal=chartH-hTotal; const yReal=chartH-hReal;
+      const pct=m.total?Math.round(m.realizadas/m.total*100):0;
+      const curMes=i===new Date().getMonth()&&curYear===String(new Date().getFullYear());
+      return `<g>
+        ${m.total?`<rect x="${x}" y="${yTotal}" width="${barW}" height="${hTotal}" rx="3" fill="#B5D4F4" opacity="${curMes?1:.7}"/>`:''}
+        ${m.realizadas?`<rect x="${x}" y="${yReal}" width="${barW}" height="${hReal}" rx="3" fill="#3B6D11" opacity="${curMes?1:.8}"/>`:''}
+        ${m.total?`<text x="${x+barW/2}" y="${yTotal-3}" text-anchor="middle" font-size="9" fill="#185FA5" font-weight="500">${m.total}</text>`:''}
+        ${m.realizadas&&m.total?`<text x="${x+barW/2}" y="${yReal-3}" text-anchor="middle" font-size="9" fill="#3B6D11">${pct}%</text>`:''}
+        <text x="${x+barW/2}" y="${chartH+padB-8}" text-anchor="middle" font-size="9" fill="${curMes?'#185FA5':'var(--text2)'}" font-weight="${curMes?'600':'400'}">${m.label}</text>
+      </g>`;
+    }).join('');
+    // Eixo Y
+    const yLines=[0,.25,.5,.75,1].map(p=>{
+      const y=Math.round(chartH-p*chartH);
+      const v=Math.round(p*maxVal);
+      return `<line x1="${padL}" y1="${y}" x2="${totalW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>
+        <text x="${padL-4}" y="${y+3}" text-anchor="end" font-size="8" fill="var(--text3)">${v}</text>`;
+    }).join('');
+    chartHtml=`<div class="card-table" style="margin-bottom:16px;padding:16px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+        Agendas por Mês — ${curYear}
+        <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:#B5D4F4"></div><span style="font-size:10px;color:var(--text2)">Agendadas</span></div>
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:#3B6D11"></div><span style="font-size:10px;color:var(--text2)">Realizadas</span></div>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <svg viewBox="0 0 ${totalW} ${chartH+padB}" width="${totalW}" height="${chartH+padB}" style="display:block;min-width:${totalW}px">
+          ${yLines}${bars}
+        </svg>
+      </div>
+    </div>`;
+  }
+
+  // ── Tabela por responsável ──
+  const ownerRows=owners.filter(o=>o.active!==false).map(o=>{
+    const oTasks=filteredTasks.filter(t=>t.ownerId===o.id);
+    if(!oTasks.length)return null;
+    const oReal=oTasks.filter(t=>t.status==='done').length;
+    const oPct=Math.round(oReal/oTasks.length*100);
+    const barColor=oPct>=100?'#3B6D11':oPct>=50?'#BA7517':'#A32D2D';
+    return{name:o.name,initials:o.initials||'?',color:o.color||'#888',total:oTasks.length,realizadas:oReal,pct:oPct,barColor};
+  }).filter(Boolean).sort((a,b)=>b.total-a.total);
+
+  const tableHtml=ownerRows.length?`
+    <div class="card-table">
+      <div style="padding:10px 14px;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:500">Por Responsável</div>
+      <table style="width:100%">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:7px 12px;font-size:10px;text-align:left;font-weight:500;color:var(--text2)">Responsável</th>
+          <th style="padding:7px 12px;font-size:10px;text-align:center;font-weight:500;color:#185FA5">Agendadas</th>
+          <th style="padding:7px 12px;font-size:10px;text-align:center;font-weight:500;color:#3B6D11">Realizadas</th>
+          <th style="padding:7px 12px;font-size:10px;text-align:left;font-weight:500;color:var(--text2);min-width:160px">% Realizado</th>
+        </tr></thead>
+        <tbody>
+          ${ownerRows.map(r=>`<tr style="border-bottom:0.5px solid var(--border)">
+            <td style="padding:7px 12px">
+              <div style="display:flex;align-items:center;gap:7px">
+                <div class="av" style="background:${r.color};color:#fff;font-size:9px;width:22px;height:22px">${r.initials}</div>
+                <span style="font-size:12px">${esc(r.name)}</span>
+              </div>
+            </td>
+            <td style="padding:7px 12px;text-align:center;font-size:13px;font-weight:500;color:#185FA5">${r.total}</td>
+            <td style="padding:7px 12px;text-align:center;font-size:13px;font-weight:500;color:#3B6D11">${r.realizadas}</td>
+            <td style="padding:7px 12px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
+                  <div style="height:100%;background:${r.barColor};width:${Math.min(r.pct,100)}%;border-radius:3px;transition:width .3s"></div>
+                </div>
+                <span style="font-size:11px;font-weight:600;color:${r.barColor};min-width:34px;text-align:right">${r.pct}%</span>
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`
+    :'<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Nenhuma agenda encontrada para o período.</div>';
+
+  content.innerHTML=cardsHtml+chartHtml+tableHtml;
+}
+
+
 function renderAgendasCtrl(){
   const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const content=$('agendas-ctrl-content');if(!content)return;
@@ -2138,19 +2380,19 @@ function renderAgendasCtrl(){
 function switchAgTab(tab){ renderAgendasOwner(); }
 
 function goPage(p){
-  closeModal(); // Ajuste 4: fecha qualquer modal aberto ao navegar
+  closeModal();
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('act'));
   document.getElementById('page-'+p)?.classList.add('active');
   document.getElementById('ni-'+p)?.classList.add('act');
-  // Reseta scroll ao trocar de página
-  document.querySelector('.content')?.scrollTo(0,0);
-  document.querySelector('.sidebar')?.scrollTo(0,0);
-  // Para páginas de agendas reseta o body também
-  if(p==='agendas-proj'||p==='agendas-owner'){
-    window.scrollTo(0,0);
-    document.documentElement.scrollTop=0;
-    document.body.scrollTop=0;
+  // Bloqueia qualquer scroll no .content pelos próximos 300ms
+  const c=document.querySelector('.content');
+  if(c){
+    c.scrollTop=0;
+    let blocking=true;
+    const blocker=()=>{ if(blocking) c.scrollTop=0; };
+    c.addEventListener('scroll',blocker);
+    setTimeout(()=>{ blocking=false; c.removeEventListener('scroll',blocker); },500);
   }
   if(p==='clients')  renderClientsTable();
   if(p==='products') renderProductsTable();
@@ -2159,41 +2401,28 @@ function goPage(p){
   if(p==='templates')renderTemplates();
   if(p==='users')    renderUsersTable();
   if(p==='ausencias')renderAusenciasTable();
-  if(p==='agendas-proj'){
+  if(p==='agenda-dash'){
     if(allCalTasks.length){
-      const ys=$('agp-filter-year');if(ys)ys.innerHTML='';
-      const ps=$('agp-filter-proj');if(ps)ps.innerHTML='';
-      renderAgendasProj();
+      const as=$('adash-ano');if(as)as.innerHTML='';
+      const ms=$('adash-mes');if(ms)ms._defaultSet=false;
+      renderAgendaDash();
     } else {
-      const ct=$('agendas-proj-content');
-      if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
+      const ct=$('agenda-dash-content');
+      if(ct)ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
       loadAllTasksForCal().then(()=>{
-        const ys=$('agp-filter-year');if(ys)ys.innerHTML='';
-        const ps=$('agp-filter-proj');if(ps)ps.innerHTML='';
-        renderAgendasProj();
-        window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;document.querySelector('.content')?.scrollTo(0,0);
-      });
-    }
-  }
-  if(p==='agendas-owner'){
-    if(allCalTasks.length){
-      const ys=$('ago-filter-year');if(ys)ys.innerHTML='';
-      const os=$('ago-filter-owner');if(os)os.innerHTML='';
-      renderAgendasOwner();
-    } else {
-      const ct=$('agendas-owner-content');
-      if(ct) ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">⏳ Carregando...</div>';
-      loadAllTasksForCal().then(()=>{
-        const ys=$('ago-filter-year');if(ys)ys.innerHTML='';
-        const os=$('ago-filter-owner');if(os)os.innerHTML='';
-        renderAgendasOwner();
-        window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;document.querySelector('.content')?.scrollTo(0,0);
+        const as=$('adash-ano');if(as)as.innerHTML='';
+        const ms=$('adash-mes');if(ms)ms._defaultSet=false;
+        renderAgendaDash();
       });
     }
   }
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
+  if(p==='relatorios'){
+    if(!allCalTasks.length) loadAllTasksForCal();
+    initRelatorios();
+  }
 }
 function switchView(v,el){
   document.querySelectorAll('.vt').forEach(t=>t.classList.remove('act'));el.classList.add('act');
@@ -2201,7 +2430,331 @@ function switchView(v,el){
   $('view-kan').style.display=v==='kan'?'block':'none';
 }
 
-// ── Export CSV ─────────────────────────────────────────────
+// ── Relatórios ─────────────────────────────────────────────
+const MESES_REL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function initRelatorios(){
+  // Popula anos e selects de todos os relatórios
+  const thisYear=new Date().getFullYear();
+  const years=[...new Set([
+    ...(allCalTasks.length?allCalTasks:tasks).map(t=>(t.dateStart||t.date||'').slice(0,4)).filter(Boolean),
+    ...tasks.map(t=>(t.date||'').slice(0,4)).filter(Boolean)
+  ])].filter(Boolean).sort().reverse();
+  if(!years.includes(String(thisYear))) years.unshift(String(thisYear));
+
+  [1,2,3,4].forEach(n=>{
+    const anoSel=$(`rel${n}-ano`);
+    if(anoSel){
+      anoSel.innerHTML=years.map(y=>`<option value="${y}"${y===String(thisYear)?' selected':''}>${y}</option>`).join('');
+    }
+    // Pré-seleciona mês atual via selected attribute (não via .value para evitar scroll do browser)
+    const mesSel=$(`rel${n}-mes`);
+    if(mesSel){
+      const curMes=String(new Date().getMonth());
+      Array.from(mesSel.options).forEach(opt=>{ opt.selected=(opt.value===curMes); });
+    }
+  });
+
+  // Owners
+  const ownerOpts='<option value="">Todos</option>'+owners.filter(o=>o.active!==false).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
+  ['rel1-owner','rel2-owner','rel4-owner'].forEach(id=>{ const s=$(id); if(s) s.innerHTML=ownerOpts; });
+
+  // Projetos
+  const projOpts='<option value="">Todos</option>'+projects.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  ['rel1-proj','rel3-proj','rel4-proj'].forEach(id=>{ const s=$(id); if(s) s.innerHTML=projOpts; });
+}
+
+// Utilitários SheetJS
+function xlsxDownload(wb, filename){
+  if(!window.XLSX){ showToast('❌ Biblioteca Excel não carregada','error'); return; }
+  window.XLSX.writeFile(wb, filename);
+}
+function xlsxWB(){ return window.XLSX.utils.book_new(); }
+function xlsxSheet(data){ return window.XLSX.utils.aoa_to_sheet(data); }
+function xlsxAppend(wb,ws,name){ window.XLSX.utils.book_append_sheet(wb,ws,name); }
+
+function relPeriodFilter(t, mesSel, anoSel, dateField){
+  const dateRef=t[dateField]||t.dateStart||t.date||'';
+  if(!dateRef) return false;
+  const [y,m]=dateRef.split('-');
+  const ano=anoSel?.value||'';
+  const mes=mesSel?.value;
+  if(ano && y!==ano) return false;
+  if(mes!==''&&mes!=null && +m-1!==+mes) return false;
+  return true;
+}
+
+// ── Rel 1: Tarefas por Status ──────────────────────────────
+async function exportRel1(){
+  const mesSel=$('rel1-mes'), anoSel=$('rel1-ano');
+  const filterOwner=$('rel1-owner')?.value||'';
+  const filterProj=$('rel1-proj')?.value||'';
+  // Usa allCalTasks (todas as tarefas), carregando se necessário
+  if(!allCalTasks.length) await loadAllTasksForCal();
+  const src=allCalTasks;
+
+  const filtered=src.filter(t=>{
+    if(filterOwner && t.ownerId!==filterOwner) return false;
+    if(filterProj && t.projId!==filterProj) return false;
+    return relPeriodFilter(t, mesSel, anoSel, 'date');
+  });
+
+  if(!filtered.length){ showToast('Nenhuma tarefa encontrada para o filtro','error'); return; }
+
+  const header=['Tarefa','Status','Grupo','Responsável','Prioridade','Prazo','Data Início','Data Fim','Projeto','Cliente','Turno'];
+  const rows=filtered.map(t=>{
+    const proj=projects.find(p=>p.id===t.projId)||{};
+    const cli=clientById(proj.clientId);
+    return [
+      t.name,
+      SM[t.status]?.l||t.status,
+      GROUPS[t.group]?.name||'',
+      ownerById(t.ownerId)?.name||'',
+      PM[t.priority]?.l||t.priority||'',
+      fd(t.date)||'',
+      fd(t.dateStart)||'',
+      fd(t.dateEnd)||'',
+      proj.name||'',
+      cli?.name||'',
+      t.turno==='tarde'?'Tarde':'Manhã'
+    ];
+  });
+
+  const wb=xlsxWB();
+  xlsxAppend(wb, xlsxSheet([header,...rows]), 'Tarefas');
+  const mesLabel=mesSel?.value!==''?MESES_REL[+mesSel.value]:'Todos';
+  xlsxDownload(wb, `tarefas_status_${mesLabel}_${anoSel?.value||'geral'}.xlsx`);
+  showToast('✅ Relatório exportado!','success');
+}
+
+// ── Rel 2: Agendas por Responsável ────────────────────────
+async function exportRel2(){
+  const mesSel=$('rel2-mes'), anoSel=$('rel2-ano');
+  const filterOwner=$('rel2-owner')?.value||'';
+  const ano=anoSel?.value||String(new Date().getFullYear());
+  const mes=mesSel?.value;
+
+  if(!allCalTasks.length) await loadAllTasksForCal();
+  const monthStr=mes!==''&&mes!=null?`${ano}-${String(+mes+1).padStart(2,'0')}`:null;
+  if(monthStr) await loadDailyStatusForMonth(+ano, +mes);
+
+  const agendas=allCalTasks.filter(t=>{
+    if(filterOwner && t.ownerId!==filterOwner) return false;
+    return relPeriodFilter(t, mesSel, anoSel, 'dateStart');
+  });
+
+  if(!agendas.length){ showToast('Nenhuma agenda encontrada para o filtro','error'); return; }
+
+  const wb=xlsxWB();
+  const ownerList=filterOwner
+    ?owners.filter(o=>o.id===filterOwner)
+    :owners.filter(o=>o.active!==false&&agendas.some(t=>t.ownerId===o.id));
+
+  // ── Aba Resumo ──
+  const headerRes=['Responsável','Qtd Tarefas','Dias Agendados','Dias Realizados','Dias Pendentes','% Realizado'];
+  const rowsRes=ownerList.map(owner=>{
+    const ownerTasks=agendas.filter(t=>t.ownerId===owner.id);
+    let diasAgendados=0, realizados=0;
+    ownerTasks.forEach(t=>{
+      if(hasPeriod(t)){
+        const start=new Date(t.dateStart+'T00:00:00');
+        const end=new Date(t.dateEnd+'T00:00:00');
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+          const dow=d.getDay(); if(dow===0||dow===6) continue;
+          diasAgendados++;
+          const dateStr=d.toISOString().slice(0,10);
+          if(getDailyStatus(t.id,dateStr)==='done') realizados++;
+        }
+      } else {
+        diasAgendados++;
+        if(t.status==='done') realizados++;
+      }
+    });
+    const pendentes=diasAgendados-realizados;
+    const pct=diasAgendados>0?Math.round(realizados/diasAgendados*100):0;
+    return [owner.name, ownerTasks.length, diasAgendados, realizados, pendentes, pct+'%'];
+  }).filter(r=>r[1]>0);
+  if(rowsRes.length) xlsxAppend(wb, xlsxSheet([headerRes,...rowsRes]), 'Resumo');
+
+  // ── Abas por responsável ──
+  ownerList.forEach(owner=>{
+    const ownerTasks=agendas.filter(t=>t.ownerId===owner.id);
+    if(!ownerTasks.length) return;
+    const header=['Tarefa','Projeto','Cliente','Data Início','Data Fim','Dia','Status do Dia','Turno'];
+    const rows=[];
+    ownerTasks.forEach(t=>{
+      const proj=projects.find(p=>p.id===t.projId)||{};
+      const cli=clientById(proj.clientId);
+      const isPeriod=hasPeriod(t);
+      if(isPeriod){
+        const start=new Date(t.dateStart+'T00:00:00');
+        const end=new Date(t.dateEnd+'T00:00:00');
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+          const dateStr=d.toISOString().slice(0,10);
+          const dow=d.getDay(); if(dow===0||dow===6) continue;
+          const ds=getDailyStatus(t.id,dateStr)||'pending';
+          rows.push([t.name,proj.name||'',cli?.name||'',fd(t.dateStart),fd(t.dateEnd),fd(dateStr),SM[ds]?.l||ds,t.turno==='tarde'?'Tarde':'Manhã']);
+        }
+      } else {
+        rows.push([t.name,proj.name||'',cli?.name||'',fd(t.dateStart||t.date),'',fd(t.dateStart||t.date),SM[t.status]?.l||t.status,t.turno==='tarde'?'Tarde':'Manhã']);
+      }
+    });
+    if(rows.length){
+      const sheetName=(owner.initials||owner.name||'Owner').slice(0,28);
+      xlsxAppend(wb, xlsxSheet([header,...rows]), sheetName);
+    }
+  });
+
+  if(!wb.SheetNames?.length){ showToast('Nenhum dado para exportar','error'); return; }
+  const mesLabel=mes!==''&&mes!=null?MESES_REL[+mes]:'Todos';
+  xlsxDownload(wb, `agendas_responsavel_${mesLabel}_${ano}.xlsx`);
+  showToast('✅ Relatório exportado!','success');
+}
+
+// ── Rel 3: Agendas por Projeto (contratadas x realizadas) ─
+async function exportRel3(){
+  const mesSel=$('rel3-mes'), anoSel=$('rel3-ano');
+  const filterProj=$('rel3-proj')?.value||'';
+  const ano=anoSel?.value||String(new Date().getFullYear());
+  const mes=mesSel?.value;
+
+  if(!allCalTasks.length) await loadAllTasksForCal();
+  const monthStr=mes!==''&&mes!=null?`${ano}-${String(+mes+1).padStart(2,'0')}`:null;
+  if(monthStr) await loadDailyStatusForMonth(+ano, +mes);
+
+  const agendas=allCalTasks.filter(t=>{
+    if(filterProj && t.projId!==filterProj) return false;
+    return relPeriodFilter(t, mesSel, anoSel, 'dateStart');
+  });
+
+  const projList=filterProj
+    ?projects.filter(p=>p.id===filterProj)
+    :projects.filter(p=>agendas.some(t=>t.projId===p.id)||p.qtdAgendas>0);
+
+  if(!projList.length){ showToast('Nenhum projeto encontrado para o filtro','error'); return; }
+
+  // Aba resumo
+  const headerRes=['Projeto','Cliente','Contratadas','Agendadas','Realizadas','Pendentes','% Realizado'];
+  const rowsRes=projList.map(proj=>{
+    const cli=clientById(proj.clientId);
+    const pTasks=agendas.filter(t=>t.projId===proj.id);
+    let realizadas=0;
+    pTasks.forEach(t=>{
+      if(hasPeriod(t)){
+        const start=new Date(t.dateStart+'T00:00:00');
+        const end=new Date(t.dateEnd+'T00:00:00');
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+          const dow=d.getDay(); if(dow===0||dow===6) continue;
+          const dateStr=d.toISOString().slice(0,10);
+          if(getDailyStatus(t.id,dateStr)==='done') realizadas++;
+        }
+      } else {
+        if(t.status==='done') realizadas++;
+      }
+    });
+    const contratadas=proj.qtdAgendas||0;
+    const agendadas=pTasks.length;
+    const pendentes=agendadas-realizadas;
+    const pct=agendadas>0?Math.round(realizadas/agendadas*100):0;
+    return [proj.name||'', cli?.name||'', contratadas, agendadas, realizadas, pendentes, pct+'%'];
+  });
+
+  // Aba detalhes
+  const headerDet=['Projeto','Cliente','Tarefa','Responsável','Data Início','Data Fim','Dia','Status do Dia','Turno'];
+  const rowsDet=[];
+  projList.forEach(proj=>{
+    const cli=clientById(proj.clientId);
+    const pTasks=agendas.filter(t=>t.projId===proj.id);
+    pTasks.forEach(t=>{
+      const owner=ownerById(t.ownerId);
+      if(hasPeriod(t)){
+        const start=new Date(t.dateStart+'T00:00:00');
+        const end=new Date(t.dateEnd+'T00:00:00');
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+          const dow=d.getDay(); if(dow===0||dow===6) continue;
+          const dateStr=d.toISOString().slice(0,10);
+          const ds=getDailyStatus(t.id,dateStr)||'pending';
+          rowsDet.push([proj.name||'', cli?.name||'', t.name, owner?.name||'', fd(t.dateStart), fd(t.dateEnd), fd(dateStr), SM[ds]?.l||ds, t.turno==='tarde'?'Tarde':'Manhã']);
+        }
+      } else {
+        rowsDet.push([proj.name||'', cli?.name||'', t.name, owner?.name||'', fd(t.dateStart||t.date), '', fd(t.dateStart||t.date), SM[t.status]?.l||t.status, t.turno==='tarde'?'Tarde':'Manhã']);
+      }
+    });
+  });
+
+  const wb=xlsxWB();
+  xlsxAppend(wb, xlsxSheet([headerRes,...rowsRes]), 'Resumo');
+  if(rowsDet.length) xlsxAppend(wb, xlsxSheet([headerDet,...rowsDet]), 'Detalhes');
+  const mesLabel=mes!==''&&mes!=null?MESES_REL[+mes]:'Todos';
+  xlsxDownload(wb, `agendas_projeto_${mesLabel}_${ano}.xlsx`);
+  showToast('✅ Relatório exportado!','success');
+}
+
+// ── Rel 4: Tarefas Realizadas + Comentários ───────────────
+async function exportRel4(){
+  const mesSel=$('rel4-mes'), anoSel=$('rel4-ano');
+  const filterOwner=$('rel4-owner')?.value||'';
+  const filterProj=$('rel4-proj')?.value||'';
+  // Usa allCalTasks (todas as tarefas), carregando se necessário
+  if(!allCalTasks.length) await loadAllTasksForCal();
+  const src=allCalTasks;
+
+  const filtered=src.filter(t=>{
+    if(filterOwner && t.ownerId!==filterOwner) return false;
+    if(filterProj && t.projId!==filterProj) return false;
+    const dateRef=t.date||t.dateStart||t.dateEnd||'';
+    if(!dateRef) return false;
+    const [y,m]=dateRef.split('-');
+    const ano=anoSel?.value||'';
+    const mes=mesSel?.value;
+    if(ano && y!==ano) return false;
+    if(mes!==''&&mes!=null && +m-1!==+mes) return false;
+    return true;
+  });
+
+  if(!filtered.length){ showToast('Nenhuma tarefa encontrada para o filtro','error'); return; }
+
+  const wb=xlsxWB();
+
+  // Aba 1: Tarefas
+  const headerT=['Tarefa','Status','Grupo','Responsável','Prioridade','Prazo','Data Início','Data Fim','Projeto','Cliente','Turno'];
+  const rowsT=filtered.map(t=>{
+    const proj=projects.find(p=>p.id===t.projId)||{};
+    const cli=clientById(proj.clientId);
+    return [t.name, SM[t.status]?.l||t.status, GROUPS[t.group]?.name||'', ownerById(t.ownerId)?.name||'',
+      PM[t.priority]?.l||'', fd(t.date)||'', fd(t.dateStart)||'', fd(t.dateEnd)||'',
+      proj.name||'', cli?.name||'', t.turno==='tarde'?'Tarde':'Manhã'];
+  });
+  xlsxAppend(wb, xlsxSheet([headerT,...rowsT]), 'Tarefas');
+
+  // Aba 2: Comentários — usa c.time (formato pt-BR) e c.text
+  const headerC=['Data/Hora','Autor','Comentário','Tarefa','Projeto','Cliente','Responsável da Tarefa'];
+  const rowsC=[];
+  filtered.forEach(t=>{
+    const proj=projects.find(p=>p.id===t.projId)||{};
+    const cli=clientById(proj.clientId);
+    const ownerName=ownerById(t.ownerId)?.name||'';
+    const comments=Array.isArray(t.comments)?t.comments:[];
+    comments.forEach(c=>{
+      rowsC.push([
+        c.time||c.date||'',          // campo correto é c.time
+        c.author||c.user||'',
+        c.text||c.content||'',
+        t.name,
+        proj.name||'',
+        cli?.name||'',
+        ownerName
+      ]);
+    });
+  });
+  if(rowsC.length) xlsxAppend(wb, xlsxSheet([headerC,...rowsC]), 'Comentários');
+
+  const mesLabel=mesSel?.value!==''&&mesSel?.value!=null?MESES_REL[+mesSel.value]:'Todos';
+  xlsxDownload(wb, `tarefas_realizadas_${mesLabel}_${anoSel?.value||'geral'}.xlsx`);
+  showToast('✅ Relatório exportado!','success');
+}
+
+
 function exportCSV(){
   const ft=tasks.filter(t=>t.projId===activeProj);
   const rows=[['Tarefa','Status','Grupo','Responsável','Prioridade','Prazo','Projeto'],
