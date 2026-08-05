@@ -206,13 +206,11 @@ async function saveChangePassword(){
 function applyPerfilRestrictions(){
   if(!currentUser)return;
   const isAdmin=currentUser.perfil==='admin';
+  // Usuários — gestão de acessos permanece exclusiva do admin
   const niUsers=$('ni-users');if(niUsers)niUsers.style.display=isAdmin?'flex':'none';
   const btnNU=$('btn-new-user');if(btnNU)btnNU.style.display=isAdmin?'':'none';
   const arU=$('add-row-user');if(arU)arU.style.display=isAdmin?'':'none';
-  // Ausências — apenas admin pode cadastrar
-  const btnNA=$('btn-new-ausencia');if(btnNA)btnNA.style.display=isAdmin?'':'none';
-  const arA=$('add-row-ausencia');if(arA)arA.style.display=isAdmin?'':'none';
-  const infoA=$('ausencia-info');if(infoA)infoA.style.display=isAdmin?'none':'block';
+  // Responsável: oculta exclusões e criação de projetos (classe .admin-only no CSS)
   document.body.classList.toggle('perfil-responsavel', !isAdmin);
 }
 
@@ -243,9 +241,7 @@ async function loadAll() {
     tasks = await api('GET', '/tasks?projId=' + activeProj);
   }
   // Responsável só vê suas tarefas
-  if(currentUser?.perfil==='responsavel'&&currentUser?.ownerId){
-    tasks=tasks.filter(t=>t.ownerId===currentUser.ownerId);
-  }
+  // Todos os perfis visualizam todas as tarefas
   renderAll();
 }
 
@@ -655,7 +651,7 @@ function taskHTML(t) {
     <div class="ma"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveTask()">Salvar tarefa</button></div>
   </div>`;
 }
-function openTaskModal(gi=0){editingTask=null;showModal(taskHTML(null));$('f-group').value=gi;lockOwnerForResponsavel();}
+function openTaskModal(gi=0){editingTask=null;showModal(taskHTML(null));$('f-group').value=gi;}
 function openEditTask(id){
   const t=tasks.find(x=>x.id===id)||allCalTasks.find(x=>x.id===id);
   if(!t)return;
@@ -669,17 +665,6 @@ function openEditTask(id){
   pendingMeet=t.meet?{...t.meet}:null;
   showModal(taskHTML(t));
   if($('f-owner'))$('f-owner').value=t.ownerId||'';
-  lockOwnerForResponsavel();
-}
-
-// Responsável não pode reatribuir tarefa para outra pessoa
-function lockOwnerForResponsavel(){
-  if(currentUser?.perfil!=='responsavel')return;
-  const sel=$('f-owner');if(!sel)return;
-  sel.value=currentUser.ownerId||'';
-  sel.disabled=true;
-  sel.style.opacity='.7';
-  sel.title='Você só pode criar/editar tarefas atribuídas a você';
 }
 
 async function submitComment(){
@@ -768,10 +753,7 @@ async function saveTask(){
   const dateEnd=$('f-date-end').value||'';
   const date=dateEnd||dateStart||$('f-date').value||'';
   const turno=document.querySelector('input[name="f-turno"]:checked')?.value||'manha';
-  // Responsável sempre salva a tarefa em seu próprio nome
-  const newOwnerId=currentUser?.perfil==='responsavel'
-    ? (currentUser.ownerId||$('f-owner').value)
-    : $('f-owner').value;
+  const newOwnerId=$('f-owner').value;
   const oldTask=editingTask?tasks.find(x=>x.id===editingTask)||allCalTasks.find(x=>x.id===editingTask):null;
   const isNew=!editingTask;
   const ownerChanged=oldTask&&oldTask.ownerId!==newOwnerId;
@@ -919,7 +901,20 @@ function projHTML(p) {
   </div>`;
 }
 function openProjModal(){editingProj=null;showModal(projHTML(null));}
-function editProj(id){const p=projects.find(x=>x.id===id);if(!p)return;editingProj=id;showModal(projHTML(p));}
+function editProj(id){
+  const p=projects.find(x=>x.id===id);if(!p)return;
+  editingProj=id;showModal(projHTML(p));
+  // Responsável edita o projeto, mas não troca cliente nem responsável principal
+  if(currentUser?.perfil!=='admin'){
+    ['p-client','p-owner'].forEach(fid=>{
+      const el=$(fid);if(!el)return;
+      el.disabled=true;
+      el.style.opacity='.6';
+      el.style.cursor='not-allowed';
+      el.title='Apenas Administradores podem alterar este campo';
+    });
+  }
+}
 
 async function saveProj(){
   const name=$('p-name').value.trim();if(!name)return;

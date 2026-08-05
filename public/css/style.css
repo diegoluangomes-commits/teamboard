@@ -197,9 +197,6 @@ td { padding: 6px 9px; vertical-align: middle; overflow: hidden; text-overflow: 
 .copy-btn:hover { background: var(--surface2); }
 .copy-btn.copied { background: var(--green-bg); color: var(--green); border-color: #97C459; }
 
-/* Perfil Responsável — oculta botões de exclusão e linha de adicionar */
-body.perfil-responsavel .btn-red { display: none !important; }
-body.perfil-responsavel .add-row { display: none !important; }
-
-/* Perfil Responsável — oculta ações de cadastro (somente leitura) */
+/* Perfil Responsável — oculta exclusões e criação de projetos */
+body.perfil-responsavel .btn-red    { display: none !important; }
 body.perfil-responsavel .admin-only { display: none !important; }
