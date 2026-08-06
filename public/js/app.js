@@ -2696,19 +2696,19 @@ function renderDashboard(d){
     const excedeu=p.contratadas>0&&p.realizadas>p.contratadas;
     const cor=corPct(p.pct);
     return `<tr style="${p.situacao==='cancelado'?'opacity:.6':''}">
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.nome)}">${esc(p.nome)}</td>
-      <td style="font-size:11px;color:var(--text2);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.cliente)||'—'}</td>
+      <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.nome)}">${esc(p.nome)}</td>
+      <td style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.cliente)}">${esc(p.cliente)||'—'}</td>
       <td><span class="pill ${st.c}" style="font-size:9px">${st.l}</span></td>
       <td style="text-align:center;font-weight:500;color:#185FA5">${p.contratadas||'—'}</td>
       <td style="text-align:center">${p.agendadas}</td>
       <td style="text-align:center;font-weight:500;color:#3B6D11">${p.realizadas}</td>
       <td style="text-align:center;color:${p.desmarcadas?'var(--red)':'var(--text3)'}">${p.desmarcadas||'—'}</td>
-      <td style="min-width:130px">
-        <div style="display:flex;align-items:center;gap:7px">
-          <div style="flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;min-width:40px;height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
             <div style="height:100%;background:${cor};width:${Math.min(p.pct,100)}%;border-radius:3px"></div>
           </div>
-          <span style="font-size:11px;font-weight:600;color:${cor};min-width:36px;text-align:right">${p.pct}%</span>
+          <span style="font-size:11px;font-weight:600;color:${cor};white-space:nowrap">${p.pct}%</span>
           ${excedeu?'<span title="Realizadas acima do contratado" style="font-size:11px">⚠️</span>':''}
         </div>
       </td>
@@ -2720,14 +2720,16 @@ function renderDashboard(d){
       <div style="padding:10px 14px;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:500">
         Agendas contratadas × realizadas por projeto
       </div>
-      <div class="tw"><table>
+      <div class="tw"><table style="table-layout:fixed;width:100%">
         <thead><tr>
-          <th>Projeto</th><th>Cliente</th><th>Situação</th>
-          <th style="text-align:center">Contratadas</th>
-          <th style="text-align:center">Agendadas</th>
-          <th style="text-align:center">Realizadas</th>
-          <th style="text-align:center">Desmarc.</th>
-          <th>% do contratado</th>
+          <th style="width:24%">Projeto</th>
+          <th style="width:20%">Cliente</th>
+          <th style="width:9%">Situação</th>
+          <th style="width:8%;text-align:center" title="Agendas previstas no contrato">Contrat.</th>
+          <th style="width:8%;text-align:center" title="Dias de agenda marcados">Agend.</th>
+          <th style="width:8%;text-align:center" title="Dias de agenda efetivamente realizados">Realiz.</th>
+          <th style="width:8%;text-align:center" title="Agendas desmarcadas pelo cliente">Desmarc.</th>
+          <th style="width:15%" title="Realizadas ÷ Contratadas">% Realizado</th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table></div>
