@@ -751,4 +751,143 @@ router.post('/task-daily-status', async (req, res) => {
   send(res, { ok: true, taskId, date, status });
 });
 
+// ── Dashboard ──────────────────────────────────────────────
+// GET /dashboard?mes=&ano=&ownerId=&status=
+// Consolida projetos, agendas contratadas x realizadas e evolução mensal
+router.get('/dashboard', async (req, res) => {
+  try {
+    const { ano, ownerId, status } = req.query;
+
+    // Projetos com dados do cliente
+    const { rows: projs } = await q(`
+      SELECT p.id, p.name, p.status, p.qtd_agendas, p.date_start, p.date_end,
+             p.cancel_reason, p.cancel_date, p.owner_id,
+             c.name AS client_name
+      FROM projects p
+      LEFT JOIN clients c ON c.id = p.client_id
+      ORDER BY p.date_start DESC NULLS LAST
+    `);
+
+    // Todas as tarefas relevantes
+    const { rows: tasks } = await q(`
+      SELECT id, proj_id, owner_id, status, date, date_start, date_end
+      FROM tasks
+    `);
+
+    // Status diário das agendas de período
+    const { rows: daily } = await q(`SELECT task_id, date, status FROM task_daily_status`);
+    const dailyMap = {};
+    daily.forEach(d => { dailyMap[d.task_id + '|' + d.date] = d.status; });
+
+    // Conta dias úteis realizados de uma tarefa
+    const contarDias = (t) => {
+      const temPeriodo = t.date_start && t.date_end && t.date_start !== t.date_end;
+      if (!temPeriodo) {
+        const dref = t.date_start || t.date || '';
+        return { agendados: dref ? 1 : 0, realizados: t.status === 'done' ? 1 : 0, dias: dref ? [dref] : [] };
+      }
+      let agendados = 0, realizados = 0; const dias = [];
+      const ini = new Date(t.date_start + 'T00:00:00');
+      const fim = new Date(t.date_end + 'T00:00:00');
+      for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
+        const dow = d.getDay();
+        if (dow === 0 || dow === 6) continue; // ignora fim de semana
+        const ds = d.toISOString().slice(0, 10);
+        agendados++;
+        dias.push(ds);
+        if (dailyMap[t.id + '|' + ds] === 'done') realizados++;
+      }
+      return { agendados, realizados, dias };
+    };
+
+    const dentroDoAno = (d) => !ano || (d || '').startsWith(ano);
+
+    // ── Comparativo por projeto ──
+    const porProjeto = projs.map(p => {
+      let ptasks = tasks.filter(t => t.proj_id === p.id);
+      if (ownerId) ptasks = ptasks.filter(t => t.owner_id === ownerId);
+
+      let agendadas = 0, realizadas = 0, desmarcadas = 0, naoAplicavel = 0;
+      let totalTarefas = 0, tarefasConcluidas = 0;
+
+      ptasks.forEach(t => {
+        const dref = t.date_start || t.date || '';
+        if (!dentroDoAno(dref)) return;
+        totalTarefas++;
+        if (t.status === 'done')   tarefasConcluidas++;
+        if (t.status === 'cancel') { desmarcadas++; return; }
+        if (t.status === 'na')     { naoAplicavel++; return; }
+        const c = contarDias(t);
+        agendadas  += c.agendados;
+        realizadas += c.realizados;
+      });
+
+      const contratadas = p.qtd_agendas || 0;
+      const pct = contratadas > 0
+        ? Math.round(realizadas / contratadas * 100)
+        : (agendadas > 0 ? Math.round(realizadas / agendadas * 100) : 0);
+      const aplicaveis = totalTarefas - desmarcadas - naoAplicavel;
+      const pctTarefas = aplicaveis > 0 ? Math.round(tarefasConcluidas / aplicaveis * 100) : 0;
+
+      return {
+        id: p.id, nome: p.name, cliente: p.client_name || '',
+        situacao: p.status || 'ativo',
+        dateStart: p.date_start || '', dateEnd: p.date_end || '',
+        cancelReason: p.cancel_reason || '', cancelDate: p.cancel_date || '',
+        contratadas, agendadas, realizadas, desmarcadas,
+        pendentes: Math.max(agendadas - realizadas, 0),
+        pct, totalTarefas, tarefasConcluidas, pctTarefas,
+        completo: aplicaveis > 0 && tarefasConcluidas === aplicaveis
+      };
+    }).filter(p => !status || p.situacao === status);
+
+    // ── Evolução mensal (agendas realizadas por mês) ──
+    const porMes = {};
+    tasks.forEach(t => {
+      if (ownerId && t.owner_id !== ownerId) return;
+      if (t.status === 'cancel' || t.status === 'na') return;
+      const c = contarDias(t);
+      c.dias.forEach(ds => {
+        if (!dentroDoAno(ds)) return;
+        const mes = ds.slice(0, 7);
+        if (!porMes[mes]) porMes[mes] = { agendadas: 0, realizadas: 0 };
+        porMes[mes].agendadas++;
+        const temPeriodo = t.date_start && t.date_end && t.date_start !== t.date_end;
+        const feito = temPeriodo ? dailyMap[t.id + '|' + ds] === 'done' : t.status === 'done';
+        if (feito) porMes[mes].realizadas++;
+      });
+    });
+    const evolucao = Object.entries(porMes)
+      .map(([mes, v]) => ({ mes, ...v }))
+      .sort((a, b) => a.mes.localeCompare(b.mes));
+
+    // ── Totais gerais ──
+    const hoje = new Date().toISOString().slice(0, 10);
+    const resumo = {
+      projetos: {
+        total:     porProjeto.length,
+        ativo:     porProjeto.filter(p => p.situacao === 'ativo').length,
+        concluido: porProjeto.filter(p => p.situacao === 'concluido').length,
+        pausado:   porProjeto.filter(p => p.situacao === 'pausado').length,
+        cancelado: porProjeto.filter(p => p.situacao === 'cancelado').length,
+        atrasados: porProjeto.filter(p =>
+          p.situacao === 'ativo' && p.dateEnd && p.dateEnd < hoje && !p.completo).length
+      },
+      agendas: {
+        contratadas: porProjeto.reduce((s, p) => s + p.contratadas, 0),
+        agendadas:   porProjeto.reduce((s, p) => s + p.agendadas, 0),
+        realizadas:  porProjeto.reduce((s, p) => s + p.realizadas, 0),
+        desmarcadas: porProjeto.reduce((s, p) => s + p.desmarcadas, 0)
+      }
+    };
+    resumo.agendas.pct = resumo.agendas.contratadas > 0
+      ? Math.round(resumo.agendas.realizadas / resumo.agendas.contratadas * 100)
+      : 0;
+
+    send(res, { resumo, projetos: porProjeto, evolucao });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

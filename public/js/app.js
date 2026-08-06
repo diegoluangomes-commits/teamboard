@@ -2577,6 +2577,10 @@ function goPage(p){
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
+  if(p==='dashboard'){
+    initDashboard();
+    loadDashboard();
+  }
   if(p==='relatorios'){
     if(!allCalTasks.length) loadAllTasksForCal();
     initRelatorios();
@@ -2586,6 +2590,161 @@ function switchView(v,el){
   document.querySelectorAll('.vt').forEach(t=>t.classList.remove('act'));el.classList.add('act');
   $('view-tbl').style.display=v==='tbl'?'block':'none';
   $('view-kan').style.display=v==='kan'?'block':'none';
+}
+
+// ── Dashboard ──────────────────────────────────────────────
+function initDashboard(){
+  const anoSel=$('dash-ano');
+  if(anoSel && !anoSel.options.length){
+    const atual=new Date().getFullYear();
+    const anos=[atual+1,atual,atual-1,atual-2];
+    anoSel.innerHTML='<option value="">Todos os anos</option>'+
+      anos.map(a=>`<option value="${a}"${a===atual?' selected':''}>${a}</option>`).join('');
+  }
+  const ownerSel=$('dash-owner');
+  if(ownerSel && ownerSel.options.length<=1){
+    ownerSel.innerHTML='<option value="">Todos responsáveis</option>'+
+      owners.filter(o=>o.active!==false).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
+  }
+}
+
+async function loadDashboard(){
+  const box=$('dash-content');if(!box)return;
+  box.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">Carregando…</div>';
+  const params=new URLSearchParams();
+  const ano=$('dash-ano')?.value; if(ano)params.set('ano',ano);
+  const own=$('dash-owner')?.value; if(own)params.set('ownerId',own);
+  const st=$('dash-status')?.value; if(st)params.set('status',st);
+  try{
+    const d=await api('GET','/dashboard?'+params.toString());
+    renderDashboard(d);
+  }catch(e){
+    box.innerHTML=`<div style="padding:40px;text-align:center;color:var(--red)">Erro ao carregar: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderDashboard(d){
+  const box=$('dash-content');if(!box)return;
+  const {resumo,projetos,evolucao}=d;
+  const a=resumo.agendas, pr=resumo.projetos;
+  const corPct=p=>p>=100?'var(--green)':p>=70?'var(--blue)':p>=40?'var(--amber)':'var(--red)';
+
+  // ── Cards de resumo ──
+  const cards=`
+    <div class="sbar" style="margin-bottom:14px">
+      <div class="sc flex1"><div class="slabel">Projetos</div><div class="sval">${pr.total}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">${pr.ativo} ativos · ${pr.concluido} concluídos</div></div>
+      <div class="sc flex1"><div class="slabel">Agendas contratadas</div><div class="sval blue">${a.contratadas}</div></div>
+      <div class="sc flex1"><div class="slabel">Agendas realizadas</div><div class="sval green">${a.realizadas}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">de ${a.agendadas} agendadas</div></div>
+      <div class="sc flex1"><div class="slabel">Aproveitamento</div>
+        <div class="sval" style="color:${corPct(a.pct)}">${a.pct}%</div>
+        <div class="pbar"><div style="height:3px;background:${corPct(a.pct)};width:${Math.min(a.pct,100)}%;border-radius:2px"></div></div></div>
+      <div class="sc flex1"><div class="slabel">Desmarcadas</div><div class="sval red">${a.desmarcadas}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">pelo cliente</div></div>
+      <div class="sc flex1"><div class="slabel">Atrasados</div><div class="sval amber">${pr.atrasados}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">${pr.cancelado} cancelados</div></div>
+    </div>`;
+
+  // ── Gráfico de evolução mensal ──
+  const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  let grafico='';
+  if(evolucao.length){
+    const max=Math.max(...evolucao.map(e=>e.agendadas),1);
+    const bw=44,gap=10,h=110,padL=30,padB=20;
+    const w=padL+(bw+gap)*evolucao.length+gap;
+    const barras=evolucao.map((e,i)=>{
+      const x=padL+gap+(bw+gap)*i;
+      const hA=Math.round(e.agendadas/max*h), hR=Math.round(e.realizadas/max*h);
+      const pct=e.agendadas?Math.round(e.realizadas/e.agendadas*100):0;
+      const [y,m]=e.mes.split('-');
+      return `<g>
+        <rect x="${x}" y="${h-hA}" width="${bw}" height="${hA}" rx="3" fill="#B5D4F4"/>
+        ${hR?`<rect x="${x}" y="${h-hR}" width="${bw}" height="${hR}" rx="3" fill="#3B6D11"/>`:''}
+        <text x="${x+bw/2}" y="${h-hA-4}" text-anchor="middle" font-size="9" fill="#185FA5" font-weight="500">${e.agendadas}</text>
+        ${e.realizadas?`<text x="${x+bw/2}" y="${h-hR+11}" text-anchor="middle" font-size="8" fill="#fff" font-weight="600">${pct}%</text>`:''}
+        <text x="${x+bw/2}" y="${h+padB-6}" text-anchor="middle" font-size="9" fill="var(--text2)">${MES[+m-1]}/${y.slice(2)}</text>
+      </g>`;
+    }).join('');
+    const eixo=[0,.5,1].map(p=>{
+      const y=Math.round(h-p*h);
+      return `<line x1="${padL}" y1="${y}" x2="${w}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>
+        <text x="${padL-5}" y="${y+3}" text-anchor="end" font-size="8" fill="var(--text3)">${Math.round(p*max)}</text>`;
+    }).join('');
+    grafico=`<div class="card-table" style="margin-bottom:14px;padding:14px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:500">Evolução mensal de agendas</div>
+        <div style="display:flex;gap:10px;margin-left:auto">
+          <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text2)"><i style="width:9px;height:9px;border-radius:2px;background:#B5D4F4"></i>Agendadas</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text2)"><i style="width:9px;height:9px;border-radius:2px;background:#3B6D11"></i>Realizadas</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto"><svg viewBox="0 0 ${w} ${h+padB}" width="${w}" height="${h+padB}" style="display:block;min-width:${w}px">${eixo}${barras}</svg></div>
+    </div>`;
+  }
+
+  // ── Tabela comparativa por projeto ──
+  const linhas=projetos.map(p=>{
+    const st=PROJ_STATUS[p.situacao]||PROJ_STATUS.ativo;
+    const excedeu=p.contratadas>0&&p.realizadas>p.contratadas;
+    const cor=corPct(p.pct);
+    return `<tr style="${p.situacao==='cancelado'?'opacity:.6':''}">
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.nome)}">${esc(p.nome)}</td>
+      <td style="font-size:11px;color:var(--text2);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.cliente)||'—'}</td>
+      <td><span class="pill ${st.c}" style="font-size:9px">${st.l}</span></td>
+      <td style="text-align:center;font-weight:500;color:#185FA5">${p.contratadas||'—'}</td>
+      <td style="text-align:center">${p.agendadas}</td>
+      <td style="text-align:center;font-weight:500;color:#3B6D11">${p.realizadas}</td>
+      <td style="text-align:center;color:${p.desmarcadas?'var(--red)':'var(--text3)'}">${p.desmarcadas||'—'}</td>
+      <td style="min-width:130px">
+        <div style="display:flex;align-items:center;gap:7px">
+          <div style="flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
+            <div style="height:100%;background:${cor};width:${Math.min(p.pct,100)}%;border-radius:3px"></div>
+          </div>
+          <span style="font-size:11px;font-weight:600;color:${cor};min-width:36px;text-align:right">${p.pct}%</span>
+          ${excedeu?'<span title="Realizadas acima do contratado" style="font-size:11px">⚠️</span>':''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const tabela=projetos.length?`
+    <div class="card-table">
+      <div style="padding:10px 14px;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:500">
+        Agendas contratadas × realizadas por projeto
+      </div>
+      <div class="tw"><table>
+        <thead><tr>
+          <th>Projeto</th><th>Cliente</th><th>Situação</th>
+          <th style="text-align:center">Contratadas</th>
+          <th style="text-align:center">Agendadas</th>
+          <th style="text-align:center">Realizadas</th>
+          <th style="text-align:center">Desmarc.</th>
+          <th>% do contratado</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table></div>
+    </div>`
+    :'<div style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Nenhum projeto encontrado para os filtros.</div>';
+
+  // ── Cancelados com motivo ──
+  const cancelados=projetos.filter(p=>p.situacao==='cancelado'&&p.cancelReason);
+  const boxCancel=cancelados.length?`
+    <div class="card-table" style="margin-top:14px">
+      <div style="padding:10px 14px;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:500">
+        Projetos cancelados — motivos
+      </div>
+      ${cancelados.map(p=>`
+        <div style="padding:9px 14px;border-bottom:0.5px solid var(--border);display:flex;gap:10px;align-items:flex-start">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:500">${esc(p.nome)}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">${esc(p.cancelReason)}</div>
+          </div>
+          ${p.cancelDate?`<div style="font-size:10px;color:var(--text3);white-space:nowrap">${fd(p.cancelDate)}</div>`:''}
+        </div>`).join('')}
+    </div>`:'';
+
+  box.innerHTML=cards+grafico+tabela+boxCancel;
 }
 
 // ── Relatórios ─────────────────────────────────────────────
