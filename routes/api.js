@@ -131,7 +131,9 @@ const toProject = r => r ? ({
   clientId: r.client_id, productId: r.product_id,
   sellerId: r.seller_id, ownerId: r.owner_id,
   dateStart: r.date_start||'', dateEnd: r.date_end||'',
-  qtdAgendas: r.qtd_agendas||0
+  qtdAgendas: r.qtd_agendas||0,
+  status: r.status||'ativo',
+  cancelReason: r.cancel_reason||'', cancelDate: r.cancel_date||''
 }) : null;
 
 const toTask = r => r ? ({
@@ -294,17 +296,17 @@ router.get('/projects', async (req, res) => {
 });
 
 router.post('/projects', requireAdmin, async (req, res) => {
-  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas } = req.body;
+  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas, status } = req.body;
   const id = uuidv4();
   const { rows } = await q(
-    'INSERT INTO projects (id,name,color,descr,client_id,product_id,seller_id,owner_id,date_start,date_end,qtd_agendas) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
-    [id, name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null, qtdAgendas||0]
+    'INSERT INTO projects (id,name,color,descr,client_id,product_id,seller_id,owner_id,date_start,date_end,qtd_agendas,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *',
+    [id, name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null, qtdAgendas||0, status||'ativo']
   );
   send(res, toProject(rows[0]));
 });
 
 router.put('/projects/:id', async (req, res) => {
-  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas } = req.body;
+  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas, status, cancelReason } = req.body;
   // Responsável pode editar, mas não pode trocar o cliente nem o responsável do projeto
   let finalClientId = clientId || null;
   let finalOwnerId  = ownerId  || null;
@@ -314,9 +316,20 @@ router.put('/projects/:id', async (req, res) => {
     finalClientId = atual[0].client_id;
     finalOwnerId  = atual[0].owner_id;
   }
+  // Registra a data do cancelamento automaticamente na transição para "cancelado"
+  const { rows: anterior } = await q('SELECT status, cancel_date FROM projects WHERE id=$1', [req.params.id]);
+  const statusFinal = status || 'ativo';
+  let cancelDate = anterior[0]?.cancel_date || null;
+  if (statusFinal === 'cancelado' && anterior[0]?.status !== 'cancelado') {
+    cancelDate = new Date().toISOString().slice(0, 10);
+  } else if (statusFinal !== 'cancelado') {
+    cancelDate = null;
+  }
+  const motivo = statusFinal === 'cancelado' ? (cancelReason || '') : '';
+
   const { rows } = await q(
-    'UPDATE projects SET name=$1,color=$2,descr=$3,client_id=$4,product_id=$5,seller_id=$6,owner_id=$7,date_start=$8,date_end=$9,qtd_agendas=$10 WHERE id=$11 RETURNING *',
-    [name, color||'#185FA5', desc||'', finalClientId, productId||null, sellerId||null, finalOwnerId, dateStart||null, dateEnd||null, qtdAgendas||0, req.params.id]
+    'UPDATE projects SET name=$1,color=$2,descr=$3,client_id=$4,product_id=$5,seller_id=$6,owner_id=$7,date_start=$8,date_end=$9,qtd_agendas=$10,status=$11,cancel_reason=$12,cancel_date=$13 WHERE id=$14 RETURNING *',
+    [name, color||'#185FA5', desc||'', finalClientId, productId||null, sellerId||null, finalOwnerId, dateStart||null, dateEnd||null, qtdAgendas||0, statusFinal, motivo, cancelDate, req.params.id]
   );
   if (!rows.length) return notFound(res,'Projeto');
   send(res, toProject(rows[0]));

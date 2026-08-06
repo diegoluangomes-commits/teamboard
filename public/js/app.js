@@ -15,6 +15,13 @@ const SM = {
   cancel:   { l: 'Cliente desmarcou', c: 's-cancel'    }
 };
 
+const PROJ_STATUS = {
+  ativo:     { l: 'Ativo',     c: 's-progress', dot: '#185FA5' },
+  concluido: { l: 'Concluído', c: 's-done',     dot: '#3B6D11' },
+  pausado:   { l: 'Pausado',   c: 's-pending',  dot: '#BA7517' },
+  cancelado: { l: 'Cancelado', c: 's-cancel',   dot: '#A32D2D' }
+};
+
 const PM = {
   high:   { l: 'Alta',  c: 'p-h' },
   medium: { l: 'Média', c: 'p-m' },
@@ -328,9 +335,11 @@ function renderProjNav() {
 function renderProjGrid() {
   const el=$('proj-grid'); if(!el)return;
   const search=($('proj-search')?.value||'').toLowerCase();
+  const fStatus=$('proj-filter-status')?.value||'';
   // Ajuste 7: ordenar por data início
   const filtered=projects
     .filter(p=>!search||p.name.toLowerCase().includes(search))
+    .filter(p=>!fStatus||(p.status||'ativo')===fStatus)
     .slice().sort((a,b)=>{
       if(!a.dateStart&&!b.dateStart)return 0;
       if(!a.dateStart)return 1;
@@ -345,12 +354,15 @@ function renderProjGrid() {
     const cli = clientById(p.clientId);
     const prod= productById(p.productId);
     const hasDesc=p.desc&&p.desc.trim().length>0;
-    return `<div class="proj-card${p.id===activeProj?' active-proj':''}" onclick="setProj('${p.id}');goPage('board')">
+    const st = PROJ_STATUS[p.status||'ativo'] || PROJ_STATUS.ativo;
+    const naoAtivo = (p.status||'ativo')!=='ativo';
+    return `<div class="proj-card${p.id===activeProj?' active-proj':''}" onclick="setProj('${p.id}');goPage('board')" style="${p.status==='cancelado'?'opacity:.65':''}">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px">
         <div style="width:10px;height:10px;border-radius:3px;background:${p.color};flex-shrink:0"></div>
         ${p.dateStart?`<span style="font-size:10px;color:var(--text3)">📅 ${fd(p.dateStart)}</span>`:''}
+        ${naoAtivo?`<span class="pill ${st.c}" style="font-size:9px;margin-left:auto">${st.l}</span>`:''}
       </div>
-      <div style="font-size:13px;font-weight:500;margin-bottom:3px">${esc(p.name)}</div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:3px;${p.status==='cancelado'?'text-decoration:line-through':''}">${esc(p.name)}</div>
       ${cli.name?`<div style="font-size:11px;color:var(--text2);margin-bottom:1px">${esc(cli.name)}</div>`:''}
       ${prod.name?`<div style="font-size:10px;color:var(--text3)">${esc(prod.name)}</div>`:''}
       <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
@@ -932,8 +944,18 @@ function projHTML(p) {
     </div>
     <div class="f2">
       <div class="fr"><label>Qtd. Agendas Contratadas</label><input type="number" id="p-qtd-agendas" min="0" value="${p?.qtdAgendas||''}" placeholder="Ex: 12"/></div>
-      <div class="fr"><label>Descrição</label><textarea id="p-desc">${esc(p?.desc||'')}</textarea></div>
+      <div class="fr"><label>Situação do projeto</label>
+        <select id="p-status" onchange="toggleCancelReason()">
+          ${Object.entries(PROJ_STATUS).map(([k,v])=>`<option value="${k}"${(p?.status||'ativo')===k?' selected':''}>${v.l}</option>`).join('')}
+        </select>
+      </div>
     </div>
+    <div class="fr" id="p-cancel-box" style="display:${p?.status==='cancelado'?'block':'none'}">
+      <label>Motivo do cancelamento</label>
+      <textarea id="p-cancel-reason" placeholder="Ex: Cliente desistiu da migração">${esc(p?.cancelReason||'')}</textarea>
+      ${p?.cancelDate?`<div style="font-size:10px;color:var(--text2);margin-top:4px">Cancelado em ${fd(p.cancelDate)}</div>`:''}
+    </div>
+    <div class="fr"><label>Descrição</label><textarea id="p-desc">${esc(p?.desc||'')}</textarea></div>
     ${!p&&templates.length?`
     <div class="section-sep"></div>
     <div style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Modelo de tarefas</div>
@@ -944,6 +966,13 @@ function projHTML(p) {
     <div class="ma"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveProj()">Salvar projeto</button></div>
   </div>`;
 }
+// Mostra o campo de motivo apenas quando o projeto é cancelado
+function toggleCancelReason(){
+  const st=$('p-status')?.value;
+  const box=$('p-cancel-box');
+  if(box)box.style.display=st==='cancelado'?'block':'none';
+}
+
 function openProjModal(){editingProj=null;showModal(projHTML(null));}
 function editProj(id){
   const p=projects.find(x=>x.id===id);if(!p)return;
@@ -966,7 +995,15 @@ async function saveProj(){
     productId:$('p-product')?.value||null,sellerId:$('p-seller')?.value||null,
     ownerId:$('p-owner')?.value||null,desc:$('p-desc')?.value||'',
     dateStart:$('p-date-start')?.value||'',dateEnd:$('p-date-end')?.value||'',
-    qtdAgendas:+$('p-qtd-agendas')?.value||0};
+    qtdAgendas:+$('p-qtd-agendas')?.value||0,
+    status:$('p-status')?.value||'ativo',
+    cancelReason:$('p-cancel-reason')?.value||''};
+  // Cancelamento exige justificativa
+  if(body.status==='cancelado'&&!body.cancelReason.trim()){
+    showToast('Informe o motivo do cancelamento','error');
+    $('p-cancel-reason')?.focus();
+    return;
+  }
   const tplId=$('p-template')?.value||'';
   if(editingProj){
     await api('PUT','/projects/'+editingProj,body);

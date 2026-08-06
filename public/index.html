@@ -119,6 +119,13 @@
             <svg style="position:absolute;left:8px;pointer-events:none" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="var(--text3)" stroke-width="1.5"><circle cx="5" cy="5" r="3.5"/><line x1="8" y1="8" x2="11" y2="11"/></svg>
             <input id="proj-search" oninput="renderProjGrid()" placeholder="Pesquisar projeto..." style="padding:5px 10px 5px 26px;font-size:12px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);width:200px"/>
           </div>
+          <select id="proj-filter-status" onchange="renderProjGrid()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
+            <option value="">Todas as situações</option>
+            <option value="ativo">Ativos</option>
+            <option value="concluido">Concluídos</option>
+            <option value="pausado">Pausados</option>
+            <option value="cancelado">Cancelados</option>
+          </select>
           <button class="btn btn-blue admin-only" onclick="openProjModal()">+ Novo projeto</button>
         </div>
       </div>
