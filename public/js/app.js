@@ -2606,6 +2606,12 @@ function initDashboard(){
     ownerSel.innerHTML='<option value="">Todos responsáveis</option>'+
       owners.filter(o=>o.active!==false).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
   }
+  const projSel=$('dash-proj');
+  if(projSel && projSel.options.length<=1){
+    const ordenados=projects.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+    projSel.innerHTML='<option value="">Todos os projetos</option>'+
+      ordenados.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  }
 }
 
 async function loadDashboard(){
@@ -2615,6 +2621,7 @@ async function loadDashboard(){
   const ano=$('dash-ano')?.value; if(ano)params.set('ano',ano);
   const own=$('dash-owner')?.value; if(own)params.set('ownerId',own);
   const st=$('dash-status')?.value; if(st)params.set('status',st);
+  const pj=$('dash-proj')?.value; if(pj)params.set('projId',pj);
   try{
     const d=await api('GET','/dashboard?'+params.toString());
     renderDashboard(d);

@@ -756,7 +756,7 @@ router.post('/task-daily-status', async (req, res) => {
 // Consolida projetos, agendas contratadas x realizadas e evolução mensal
 router.get('/dashboard', async (req, res) => {
   try {
-    const { ano, ownerId, status } = req.query;
+    const { ano, ownerId, status, projId } = req.query;
 
     // Projetos com dados do cliente
     const { rows: projs } = await q(`
@@ -839,11 +839,14 @@ router.get('/dashboard', async (req, res) => {
         pct, totalTarefas, tarefasConcluidas, pctTarefas,
         completo: aplicaveis > 0 && tarefasConcluidas === aplicaveis
       };
-    }).filter(p => !status || p.situacao === status);
+    }).filter(p => (!status || p.situacao === status) && (!projId || p.id === projId));
 
     // ── Evolução mensal (agendas realizadas por mês) ──
+    // Considera apenas os projetos que passaram pelos filtros acima
+    const idsFiltrados = new Set(porProjeto.map(p => p.id));
     const porMes = {};
     tasks.forEach(t => {
+      if (!idsFiltrados.has(t.proj_id)) return;
       if (ownerId && t.owner_id !== ownerId) return;
       if (t.status === 'cancel' || t.status === 'na') return;
       const c = contarDias(t);
