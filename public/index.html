@@ -199,8 +199,24 @@
           <span id="cal-lbl" style="font-size:13px;font-weight:500;min-width:130px;text-align:center"></span>
           <button class="btn" onclick="calNav(1)">&#8594;</button>
           <select id="cal-fil-owner" onchange="renderCalendar()"><option value="">Todos responsáveis</option></select>
-          <select id="cal-fil-client" onchange="renderCalendar()"><option value="">Todos clientes</option></select>
-          <select id="cal-fil-proj" onchange="renderCalendar()"><option value="">Todos projetos</option></select>
+          <div style="position:relative;display:inline-flex;align-items:center">
+            <input id="cal-fil-client-txt" list="dl-clients" placeholder="Todos clientes"
+                   oninput="onCalFilterInput('client')" onfocus="this.select()"
+                   style="font-size:12px;padding:5px 22px 5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);width:165px"/>
+            <datalist id="dl-clients"></datalist>
+            <span onclick="clearCalFilter('client')" title="Limpar"
+                  style="position:absolute;right:7px;cursor:pointer;color:var(--text3);font-size:13px;line-height:1">×</span>
+            <input type="hidden" id="cal-fil-client"/>
+          </div>
+          <div style="position:relative;display:inline-flex;align-items:center">
+            <input id="cal-fil-proj-txt" list="dl-projs" placeholder="Todos projetos"
+                   oninput="onCalFilterInput('proj')" onfocus="this.select()"
+                   style="font-size:12px;padding:5px 22px 5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);width:175px"/>
+            <datalist id="dl-projs"></datalist>
+            <span onclick="clearCalFilter('proj')" title="Limpar"
+                  style="position:absolute;right:7px;cursor:pointer;color:var(--text3);font-size:13px;line-height:1">×</span>
+            <input type="hidden" id="cal-fil-proj"/>
+          </div>
         </div>
       </div>
       <div id="cal-cont"></div>

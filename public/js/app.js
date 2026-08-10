@@ -288,10 +288,19 @@ function updateSelects() {
   // Selects calendário
   const cfo=$('cal-fil-owner');
   if(cfo){const v=cfo.value;cfo.innerHTML='<option value="">Todos responsáveis</option>'+owners.map(o=>`<option value="${o.id}"${o.id===v?' selected':''}>${esc(o.name)}</option>`).join('');cfo.value=v;}
-  const cfc=$('cal-fil-client');
-  if(cfc){const v=cfc.value;cfc.innerHTML='<option value="">Todos clientes</option>'+clients.map(c=>`<option value="${c.id}"${c.id===v?' selected':''}>${esc(c.name)}</option>`).join('');cfc.value=v;}
-  const cfp=$('cal-fil-proj');
-  if(cfp){const v=cfp.value;cfp.innerHTML='<option value="">Todos projetos</option>'+projects.map(p=>`<option value="${p.id}"${p.id===v?' selected':''}>${esc(p.name)}</option>`).join('');cfp.value=v;}
+  // Autocomplete do calendário — cliente e projeto (digita e filtra)
+  const dlc=$('dl-clients');
+  if(dlc){
+    dlc.innerHTML=clients.slice()
+      .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))
+      .map(c=>`<option value="${esc(c.name)}"></option>`).join('');
+  }
+  const dlp=$('dl-projs');
+  if(dlp){
+    dlp.innerHTML=projects.slice()
+      .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))
+      .map(p=>`<option value="${esc(p.name)}"></option>`).join('');
+  }
 
   // Selects em modais
   ['f-owner'].forEach(id => {
@@ -1546,6 +1555,34 @@ function getDailyStatus(taskId, dateStr){
 
 function hasPeriod(t){
   return t.dateStart && t.dateEnd && t.dateStart !== t.dateEnd;
+}
+
+// ── Autocomplete dos filtros do calendário ────────────────
+// Converte o nome digitado no id correspondente e refiltra
+function onCalFilterInput(tipo){
+  const txt=$(`cal-fil-${tipo}-txt`);
+  const hid=$(`cal-fil-${tipo}`);
+  if(!txt||!hid)return;
+  const termo=txt.value.trim().toLowerCase();
+  const lista=tipo==='client'?clients:projects;
+  // Casa pelo nome exato (escolhido na lista) ou pelo único resultado da busca
+  let achado=lista.find(x=>(x.name||'').toLowerCase()===termo);
+  if(!achado&&termo){
+    const parciais=lista.filter(x=>(x.name||'').toLowerCase().includes(termo));
+    if(parciais.length===1)achado=parciais[0];
+  }
+  hid.value=achado?achado.id:'';
+  txt.style.borderColor=termo&&!achado?'#F09595':'var(--border2)';
+  renderCalendar();
+}
+
+function clearCalFilter(tipo){
+  const txt=$(`cal-fil-${tipo}-txt`);
+  const hid=$(`cal-fil-${tipo}`);
+  if(txt){txt.value='';txt.style.borderColor='var(--border2)';}
+  if(hid)hid.value='';
+  renderCalendar();
+  txt?.focus();
 }
 
 function calFilteredTasks(){
