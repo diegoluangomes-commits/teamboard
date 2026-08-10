@@ -235,6 +235,7 @@ function applyPerfilRestrictions(){
   const isAdmin=currentUser.perfil==='admin';
   // Usuários — gestão de acessos permanece exclusiva do admin
   const niUsers=$('ni-users');if(niUsers)niUsers.style.display=isAdmin?'flex':'none';
+  const niAudit=$('ni-audit');if(niAudit)niAudit.style.display=isAdmin?'flex':'none';
   const btnNU=$('btn-new-user');if(btnNU)btnNU.style.display=isAdmin?'':'none';
   const arU=$('add-row-user');if(arU)arU.style.display=isAdmin?'':'none';
   // Responsável: oculta exclusões e criação de projetos (classe .admin-only no CSS)
@@ -2577,6 +2578,10 @@ function goPage(p){
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
+  if(p==='audit'){
+    initAudit();
+    loadAudit(1);
+  }
   if(p==='dashboard'){
     initDashboard();
     loadDashboard();
@@ -2590,6 +2595,115 @@ function switchView(v,el){
   document.querySelectorAll('.vt').forEach(t=>t.classList.remove('act'));el.classList.add('act');
   $('view-tbl').style.display=v==='tbl'?'block':'none';
   $('view-kan').style.display=v==='kan'?'block':'none';
+}
+
+// ── Auditoria ──────────────────────────────────────────────
+const AUD_ACOES = {
+  criar:        { l:'Criou',          c:'s-done',     ic:'＋' },
+  editar:       { l:'Editou',         c:'s-progress', ic:'✎'  },
+  excluir:      { l:'Excluiu',        c:'s-cancel',   ic:'✕'  },
+  login:        { l:'Entrou',         c:'s-na',       ic:'→'  },
+  login_falhou: { l:'Login falhado',  c:'s-cancel',   ic:'⚠'  },
+  logout:       { l:'Saiu',           c:'s-na',       ic:'←'  }
+};
+let audTimer=null;
+function debounceAudit(){ clearTimeout(audTimer); audTimer=setTimeout(()=>loadAudit(1),400); }
+
+function initAudit(){
+  const sel=$('aud-user');
+  if(sel && sel.options.length<=1){
+    sel.innerHTML='<option value="">Todos usuários</option>'+
+      users.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');
+  }
+}
+
+async function loadAudit(page=1){
+  const box=$('aud-content');if(!box)return;
+  box.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">Carregando…</div>';
+  const p=new URLSearchParams({page});
+  const add=(k,id)=>{const v=$(id)?.value;if(v)p.set(k,v);};
+  add('user','aud-user'); add('action','aud-action'); add('entity','aud-entity');
+  add('de','aud-de'); add('ate','aud-ate'); add('q','aud-q');
+  try{
+    const [d,resumo]=await Promise.all([
+      api('GET','/audit?'+p.toString()),
+      api('GET','/audit/resumo').catch(()=>null)
+    ]);
+    renderAudit(d,resumo);
+  }catch(e){
+    box.innerHTML=`<div style="padding:40px;text-align:center;color:var(--red)">Erro: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderAudit(d,resumo){
+  const box=$('aud-content');if(!box)return;
+
+  const cards=resumo?`
+    <div class="sbar" style="margin-bottom:14px">
+      <div class="sc flex1"><div class="slabel">Registros hoje</div><div class="sval blue">${resumo.hoje}</div></div>
+      <div class="sc flex1"><div class="slabel">Exclusões (30 dias)</div><div class="sval red">${resumo.exclusoes30d}</div></div>
+      <div class="sc flex1"><div class="slabel">Logins falhados (7 dias)</div><div class="sval amber">${resumo.loginsFalhos7d}</div></div>
+      <div class="sc flex1"><div class="slabel">Total no histórico</div><div class="sval">${resumo.total}</div></div>
+    </div>`:'';
+
+  if(!d.registros.length){
+    box.innerHTML=cards+'<div style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Nenhum registro encontrado para os filtros.</div>';
+    return;
+  }
+
+  const linhas=d.registros.map(r=>{
+    const a=AUD_ACOES[r.action]||{l:r.action,c:'s-na',ic:'•'};
+    const dt=new Date(r.createdAt);
+    const quando=dt.toLocaleDateString('pt-BR')+' '+dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    // Monta a lista de alterações "campo: antes → depois"
+    let det='';
+    if(r.changes&&Object.keys(r.changes).length){
+      det=Object.entries(r.changes).map(([campo,v])=>
+        `<div style="font-size:10px;color:var(--text2);margin-top:2px">
+          <span style="font-weight:500">${esc(campo)}:</span>
+          <span style="text-decoration:line-through;opacity:.6">${esc(v.de||'(vazio)')}</span>
+          <span style="margin:0 3px">→</span>
+          <span style="color:var(--text)">${esc(v.para||'(vazio)')}</span>
+        </div>`).join('');
+    }
+    return `<tr>
+      <td style="white-space:nowrap;font-size:11px;color:var(--text2)">${quando}</td>
+      <td style="font-size:11px">${esc(r.userName||'—')}</td>
+      <td><span class="pill ${a.c}" style="font-size:9px">${a.ic} ${a.l}</span></td>
+      <td style="font-size:11px;color:var(--text2)">${esc(r.entity||'—')}</td>
+      <td>
+        <div style="font-size:12px">${esc(r.entityName||'—')}</div>
+        ${det}
+      </td>
+      <td style="font-size:10px;color:var(--text3);white-space:nowrap">${esc(r.ip||'')}</td>
+    </tr>`;
+  }).join('');
+
+  // Paginação
+  const nav=d.paginas>1?`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-top:0.5px solid var(--border)">
+      <span style="font-size:11px;color:var(--text2)">${d.total} registro(s) · página ${d.page} de ${d.paginas}</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" ${d.page<=1?'disabled style="opacity:.4"':''} onclick="loadAudit(${d.page-1})">← Anterior</button>
+        <button class="btn btn-sm" ${d.page>=d.paginas?'disabled style="opacity:.4"':''} onclick="loadAudit(${d.page+1})">Próxima →</button>
+      </div>
+    </div>`:`<div style="padding:9px 14px;border-top:0.5px solid var(--border);font-size:11px;color:var(--text2)">${d.total} registro(s)</div>`;
+
+  box.innerHTML=cards+`
+    <div class="card-table">
+      <div class="tw"><table style="table-layout:fixed;width:100%">
+        <thead><tr>
+          <th style="width:13%">Data/Hora</th>
+          <th style="width:14%">Usuário</th>
+          <th style="width:12%">Ação</th>
+          <th style="width:10%">Tipo</th>
+          <th style="width:41%">Registro e alterações</th>
+          <th style="width:10%">IP</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table></div>
+      ${nav}
+    </div>`;
 }
 
 // ── Dashboard ──────────────────────────────────────────────

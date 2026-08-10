@@ -27,15 +27,135 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// Rotas liberadas sem sessão: login, integração externa (protegida por API key)
+// Rotas liberadas sem sessão
 const ROTAS_PUBLICAS = ['/login', '/logout-local'];
 
 // Trava global: qualquer rota não listada acima exige sessão ativa.
-// Rotas /ext/* usam x-api-key e são validadas pelo requireApiKey.
 router.use((req, res, next) => {
   if (ROTAS_PUBLICAS.includes(req.path)) return next();
   if (req.path.startsWith('/ext/'))      return next();
   return requireAuth(req, res, next);
+});
+
+// ── Auditoria ──────────────────────────────────────────────
+// Mapeia rota → nome legível da entidade
+const ENTIDADES = {
+  projects:'projeto', tasks:'tarefa', clients:'cliente', products:'produto',
+  owners:'responsável', sellers:'vendedor', users:'usuário',
+  ausencias:'ausência', templates:'modelo', 'task-daily-status':'agenda diária'
+};
+
+// Campos que nunca entram no log
+const CAMPOS_OCULTOS = ['password','senha','token','secret'];
+
+// Rótulos amigáveis para os campos
+const ROTULOS = {
+  name:'Nome', email:'E-mail', phone:'Telefone', status:'Situação',
+  clientId:'Cliente', productId:'Produto', sellerId:'Vendedor', ownerId:'Responsável',
+  projId:'Projeto', date:'Prazo', dateStart:'Data início', dateEnd:'Data fim',
+  priority:'Prioridade', turno:'Turno', desc:'Descrição', notes:'Observações',
+  qtdAgendas:'Qtd. agendas', cancelReason:'Motivo do cancelamento',
+  classification:'Classificação', perfil:'Perfil', active:'Ativo', group:'Grupo',
+  contactName:'Contato', contactRole:'Cargo do contato'
+};
+
+// Compara o estado anterior com o novo e devolve apenas o que mudou
+function diffValores(antes, depois) {
+  const mudancas = {};
+  if (!depois) return mudancas;
+  Object.keys(depois).forEach(k => {
+    if (CAMPOS_OCULTOS.includes(k.toLowerCase())) return;
+    const vAntes  = antes ? antes[k] : undefined;
+    const vDepois = depois[k];
+    if (typeof vDepois === 'object' && vDepois !== null) return; // ignora objetos/arrays
+    const a = vAntes  === null || vAntes  === undefined ? '' : String(vAntes);
+    const d = vDepois === null || vDepois === undefined ? '' : String(vDepois);
+    if (a !== d) mudancas[ROTULOS[k] || k] = { de: a, para: d };
+  });
+  return mudancas;
+}
+
+// Grava um evento na trilha (nunca interrompe a operação principal)
+async function registrarAuditoria(req, { action, entity, entityId, entityName, changes }) {
+  try {
+    await q(
+      `INSERT INTO audit_log (user_id,user_name,user_perfil,action,entity,entity_id,entity_name,changes,ip)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        req.session?.userId || null,
+        req.session?.userName || 'Desconhecido',
+        req.session?.userPerfil || null,
+        action, entity || null, entityId || null, entityName || null,
+        changes && Object.keys(changes).length ? JSON.stringify(changes) : null,
+        (req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim()
+      ]
+    );
+  } catch (e) {
+    console.warn('[AUDIT] Falha ao registrar:', e.message);
+  }
+}
+
+// Busca o nome do registro para exibir no log
+async function nomeDoRegistro(tabela, id) {
+  try {
+    const { rows } = await q(`SELECT name FROM ${tabela} WHERE id=$1`, [id]);
+    return rows[0]?.name || null;
+  } catch { return null; }
+}
+
+// Intercepta automaticamente toda operação de escrita
+router.use(async (req, res, next) => {
+  const metodo = req.method;
+  if (!['POST','PUT','PATCH','DELETE'].includes(metodo)) return next();
+  if (req.path.startsWith('/ext/') || req.path === '/login' || req.path === '/logout-local') return next();
+
+  // /clients/abc → ['clients','abc']
+  const partes  = req.path.split('/').filter(Boolean);
+  const recurso = partes[0];
+  const entity  = ENTIDADES[recurso];
+  if (!entity) return next();
+
+  const id = partes[1] && partes[1] !== 'stats' ? partes[1] : null;
+  const action = metodo === 'POST' ? (id ? 'editar' : 'criar')
+               : metodo === 'DELETE' ? 'excluir' : 'editar';
+
+  // Estado anterior — necessário para o diff e para saber o nome do excluído
+  let antes = null;
+  if (id && ['PUT','PATCH','DELETE'].includes(metodo)) {
+    try {
+      const { rows } = await q(`SELECT * FROM ${recurso} WHERE id=$1`, [id]);
+      antes = rows[0] || null;
+    } catch {}
+  }
+
+  // Intercepta a resposta para registrar apenas operações bem-sucedidas
+  const jsonOriginal = res.json.bind(res);
+  res.json = (body) => {
+    if (res.statusCode < 400) {
+      const nome = body?.name || antes?.name || null;
+      let changes = {};
+      if (action === 'excluir') {
+        changes = antes?.name ? { Registro: { de: antes.name, para: '(excluído)' } } : {};
+      } else if (action === 'editar' && antes) {
+        // Converte snake_case do banco para camelCase do corpo da requisição
+        const antesCamel = {};
+        Object.keys(antes).forEach(k => {
+          antesCamel[k.replace(/_([a-z])/g, (_,c) => c.toUpperCase())] = antes[k];
+        });
+        changes = diffValores(antesCamel, req.body);
+      } else if (action === 'criar') {
+        changes = diffValores({}, req.body);
+      }
+      registrarAuditoria(req, {
+        action, entity,
+        entityId: id || body?.id || null,
+        entityName: nome,
+        changes
+      });
+    }
+    return jsonOriginal(body);
+  };
+  next();
 });
 
 // Exige perfil admin — bloqueia Responsável
@@ -184,7 +304,10 @@ router.post('/login', async (req, res) => {
 
     const { rows } = await q('SELECT * FROM users WHERE email=$1 AND active=true', [email]);
     // Mensagem genérica: não revela se o e-mail existe
-    if (!rows.length) return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+    if (!rows.length) {
+      await registrarAuditoria(req, { action:'login_falhou', entity:'sessão', entityName:email });
+      return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+    }
 
     const user = rows[0];
     let ok = false;
@@ -198,7 +321,10 @@ router.post('/login', async (req, res) => {
         await q('UPDATE users SET password=$1 WHERE id=$2', [hash, user.id]);
       }
     }
-    if (!ok) return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+    if (!ok) {
+      await registrarAuditoria(req, { action:'login_falhou', entity:'sessão', entityName:email });
+      return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+    }
 
     // Renova o ID da sessão no login (previne session fixation)
     req.session.regenerate(err => {
@@ -207,6 +333,7 @@ router.post('/login', async (req, res) => {
       req.session.userPerfil = user.perfil;
       req.session.userName   = user.name;
       req.session.ownerId    = user.owner_id;
+      registrarAuditoria(req, { action:'login', entity:'sessão', entityId:user.id, entityName:user.name });
       send(res, { ok: true, user: toUser(user) });
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -891,6 +1018,59 @@ router.get('/dashboard', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Auditoria — consulta (somente admin) ──────────────────
+// GET /audit?user=&action=&entity=&de=&ate=&q=&page=
+router.get('/audit', requireAdmin, async (req, res) => {
+  try {
+    const { user, action, entity, de, ate, q: busca } = req.query;
+    const page  = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = 50;
+    const off   = (page - 1) * limit;
+
+    const cond = [], par = [];
+    if (user)   { par.push(user);            cond.push(`user_id = $${par.length}`); }
+    if (action) { par.push(action);          cond.push(`action  = $${par.length}`); }
+    if (entity) { par.push(entity);          cond.push(`entity  = $${par.length}`); }
+    if (de)     { par.push(de);              cond.push(`created_at >= $${par.length}::date`); }
+    if (ate)    { par.push(ate);             cond.push(`created_at < ($${par.length}::date + INTERVAL '1 day')`); }
+    if (busca)  { par.push('%'+busca+'%');   cond.push(`(entity_name ILIKE $${par.length} OR user_name ILIKE $${par.length})`); }
+    const where = cond.length ? 'WHERE ' + cond.join(' AND ') : '';
+
+    const { rows: [{ total }] } = await q(`SELECT COUNT(*) AS total FROM audit_log ${where}`, par);
+    const { rows } = await q(
+      `SELECT * FROM audit_log ${where} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${off}`, par
+    );
+
+    send(res, {
+      total: parseInt(total),
+      page, limit,
+      paginas: Math.ceil(total / limit),
+      registros: rows.map(r => ({
+        id: r.id, userId: r.user_id, userName: r.user_name, userPerfil: r.user_perfil,
+        action: r.action, entity: r.entity, entityId: r.entity_id, entityName: r.entity_name,
+        changes: r.changes, ip: r.ip, createdAt: r.created_at
+      }))
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /audit/resumo — contadores para os cards
+router.get('/audit/resumo', requireAdmin, async (req, res) => {
+  try {
+    const { rows: [hoje] } = await q(
+      `SELECT COUNT(*) AS total FROM audit_log WHERE created_at >= CURRENT_DATE`);
+    const { rows: [exc] } = await q(
+      `SELECT COUNT(*) AS total FROM audit_log WHERE action='excluir' AND created_at >= NOW() - INTERVAL '30 days'`);
+    const { rows: [falhas] } = await q(
+      `SELECT COUNT(*) AS total FROM audit_log WHERE action='login_falhou' AND created_at >= NOW() - INTERVAL '7 days'`);
+    const { rows: [geral] } = await q(`SELECT COUNT(*) AS total FROM audit_log`);
+    send(res, {
+      hoje: +hoje.total, exclusoes30d: +exc.total,
+      loginsFalhos7d: +falhas.total, total: +geral.total
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

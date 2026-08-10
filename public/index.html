@@ -74,6 +74,10 @@
       <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="1" width="9" height="11" rx="1.2"/><line x1="4" y1="4" x2="9" y2="4"/><line x1="4" y1="6.5" x2="9" y2="6.5"/><line x1="4" y1="9" x2="7" y2="9"/></svg>
       Relatórios
     </div>
+    <div class="ni" id="ni-audit" onclick="goPage('audit')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6.5 1.5 L11 3.5 v3 c0 2.6-1.9 4.6-4.5 5.5 C3.9 11.1 2 9.1 2 6.5 v-3 z"/><polyline points="4.6,6.4 6,7.8 8.6,5"/></svg>
+      Auditoria
+    </div>
     <div class="ns" style="margin-top:4px">Cadastros</div>
     <div class="ni" id="ni-clients" onclick="goPage('clients')">
       <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="11" height="9" rx="1.5"/><line x1="1" y1="5" x2="12" y2="5"/></svg>
@@ -336,6 +340,42 @@
         </table></div>
         <div class="add-row" id="add-row-ausencia" onclick="openAusenciaModal()">+ Adicionar ausência</div>
       </div>
+    </div>
+
+    <!-- Auditoria -->
+    <div class="page" id="page-audit">
+      <div class="ph">
+        <div class="ptitle">Auditoria</div>
+        <div class="ctrls">
+          <input type="date" id="aud-de" onchange="loadAudit(1)" title="Data inicial" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)"/>
+          <input type="date" id="aud-ate" onchange="loadAudit(1)" title="Data final" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)"/>
+          <select id="aud-user" onchange="loadAudit(1)" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
+            <option value="">Todos usuários</option>
+          </select>
+          <select id="aud-action" onchange="loadAudit(1)" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
+            <option value="">Todas as ações</option>
+            <option value="criar">Criação</option>
+            <option value="editar">Edição</option>
+            <option value="excluir">Exclusão</option>
+            <option value="login">Login</option>
+            <option value="login_falhou">Login falhado</option>
+          </select>
+          <select id="aud-entity" onchange="loadAudit(1)" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
+            <option value="">Todos os tipos</option>
+            <option value="projeto">Projeto</option>
+            <option value="tarefa">Tarefa</option>
+            <option value="cliente">Cliente</option>
+            <option value="produto">Produto</option>
+            <option value="responsável">Responsável</option>
+            <option value="vendedor">Vendedor</option>
+            <option value="usuário">Usuário</option>
+            <option value="ausência">Ausência</option>
+            <option value="sessão">Sessão</option>
+          </select>
+          <input id="aud-q" oninput="debounceAudit()" placeholder="Buscar..." style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);width:150px"/>
+        </div>
+      </div>
+      <div id="aud-content"></div>
     </div>
 
     <!-- Dashboard -->

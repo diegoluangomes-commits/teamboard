@@ -228,6 +228,53 @@ async function initDB() {
     console.warn('[DB] Aviso na migração de senhas:', e.message);
   }
 
+  // ── Migration: trilha de auditoria ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id          BIGSERIAL PRIMARY KEY,
+      user_id     TEXT,
+      user_name   TEXT,
+      user_perfil TEXT,
+      action      TEXT NOT NULL,
+      entity      TEXT,
+      entity_id   TEXT,
+      entity_name TEXT,
+      changes     JSONB,
+      ip          TEXT,
+      created_at  TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_user    ON audit_log(user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_entity  ON audit_log(entity, entity_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_action  ON audit_log(action);
+  `).catch(e => console.warn('[DB] Aviso audit_log:', e.message));
+
+  // ── Retenção por criticidade ──
+  // Exclusões e mudanças de usuário/permissão: 24 meses
+  // Edições e criações comuns: 12 meses | Logins: 6 meses
+  try {
+    const { rowCount: r1 } = await pool.query(`
+      DELETE FROM audit_log
+      WHERE created_at < NOW() - INTERVAL '24 months'
+        AND (action = 'excluir' OR entity = 'usuário')
+    `);
+    const { rowCount: r2 } = await pool.query(`
+      DELETE FROM audit_log
+      WHERE created_at < NOW() - INTERVAL '12 months'
+        AND action IN ('criar','editar')
+        AND entity <> 'usuário'
+    `);
+    const { rowCount: r3 } = await pool.query(`
+      DELETE FROM audit_log
+      WHERE created_at < NOW() - INTERVAL '6 months'
+        AND action IN ('login','login_falhou','logout')
+    `);
+    const total = (r1||0)+(r2||0)+(r3||0);
+    if (total) console.log(`[DB] Auditoria: ${total} registro(s) antigo(s) removido(s).`);
+  } catch (e) {
+    console.warn('[DB] Aviso na retenção da auditoria:', e.message);
+  }
+
   console.log('[DB] PostgreSQL conectado e tabelas prontas.');
 }
 
