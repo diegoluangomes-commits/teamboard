@@ -374,11 +374,11 @@ function renderProjGrid() {
     const tp = PROJ_TIPO[p.tipo||'implantacao'] || PROJ_TIPO.implantacao;
     const naoAtivo = (p.status||'ativo')!=='ativo';
     return `<div class="proj-card${p.id===activeProj?' active-proj':''}" onclick="setProj('${p.id}');goPage('board')" style="${p.status==='cancelado'?'opacity:.65':''}">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px">
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:9px;flex-wrap:wrap;min-width:0">
         <div style="width:10px;height:10px;border-radius:3px;background:${p.color};flex-shrink:0"></div>
-        ${p.dateStart?`<span style="font-size:10px;color:var(--text3)">📅 ${fd(p.dateStart)}</span>`:''}
-        <span class="pill ${tp.c}" style="font-size:9px">${tp.l}</span>
-        ${naoAtivo?`<span class="pill ${st.c}" style="font-size:9px;margin-left:auto">${st.l}</span>`:''}
+        ${p.dateStart?`<span style="font-size:10px;color:var(--text3);white-space:nowrap">📅 ${fd(p.dateStart)}</span>`:''}
+        <span class="pill ${tp.c}" style="font-size:9px;max-width:100%;overflow:hidden;text-overflow:ellipsis">${tp.l}</span>
+        ${naoAtivo?`<span class="pill ${st.c}" style="font-size:9px;max-width:100%;overflow:hidden;text-overflow:ellipsis">${st.l}</span>`:''}
       </div>
       <div style="font-size:13px;font-weight:500;margin-bottom:3px;${p.status==='cancelado'?'text-decoration:line-through':''}">${esc(p.name)}</div>
       ${cli.name?`<div style="font-size:11px;color:var(--text2);margin-bottom:1px">${esc(cli.name)}</div>`:''}
