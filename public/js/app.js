@@ -15,6 +15,12 @@ const SM = {
   cancel:   { l: 'Cliente desmarcou', c: 's-cancel'    }
 };
 
+const PROJ_TIPO = {
+  implantacao: { l: 'Implantação', c: 'class-b' },
+  treinamento: { l: 'Treinamento', c: 'class-c' },
+  servicos:    { l: 'Serviços',    c: 'class-a' }
+};
+
 const PROJ_STATUS = {
   ativo:     { l: 'Ativo',     c: 's-progress', dot: '#185FA5' },
   concluido: { l: 'Concluído', c: 's-done',     dot: '#3B6D11' },
@@ -365,11 +371,13 @@ function renderProjGrid() {
     const prod= productById(p.productId);
     const hasDesc=p.desc&&p.desc.trim().length>0;
     const st = PROJ_STATUS[p.status||'ativo'] || PROJ_STATUS.ativo;
+    const tp = PROJ_TIPO[p.tipo||'implantacao'] || PROJ_TIPO.implantacao;
     const naoAtivo = (p.status||'ativo')!=='ativo';
     return `<div class="proj-card${p.id===activeProj?' active-proj':''}" onclick="setProj('${p.id}');goPage('board')" style="${p.status==='cancelado'?'opacity:.65':''}">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px">
         <div style="width:10px;height:10px;border-radius:3px;background:${p.color};flex-shrink:0"></div>
         ${p.dateStart?`<span style="font-size:10px;color:var(--text3)">📅 ${fd(p.dateStart)}</span>`:''}
+        <span class="pill ${tp.c}" style="font-size:9px">${tp.l}</span>
         ${naoAtivo?`<span class="pill ${st.c}" style="font-size:9px;margin-left:auto">${st.l}</span>`:''}
       </div>
       <div style="font-size:13px;font-weight:500;margin-bottom:3px;${p.status==='cancelado'?'text-decoration:line-through':''}">${esc(p.name)}</div>
@@ -953,13 +961,18 @@ function projHTML(p) {
       <div class="fr"><label>Previsão de conclusão</label><input type="date" id="p-date-end" value="${p?.dateEnd||''}"/></div>
     </div>
     <div class="f2">
-      <div class="fr"><label>Qtd. Agendas Contratadas</label><input type="number" id="p-qtd-agendas" min="0" value="${p?.qtdAgendas||''}" placeholder="Ex: 12"/></div>
+      <div class="fr"><label>Tipo do projeto</label>
+        <select id="p-tipo">
+          ${Object.entries(PROJ_TIPO).map(([k,v])=>`<option value="${k}"${(p?.tipo||'implantacao')===k?' selected':''}>${v.l}</option>`).join('')}
+        </select>
+      </div>
       <div class="fr"><label>Situação do projeto</label>
         <select id="p-status" onchange="toggleCancelReason()">
           ${Object.entries(PROJ_STATUS).map(([k,v])=>`<option value="${k}"${(p?.status||'ativo')===k?' selected':''}>${v.l}</option>`).join('')}
         </select>
       </div>
     </div>
+    <div class="fr"><label>Qtd. Agendas Contratadas</label><input type="number" id="p-qtd-agendas" min="0" value="${p?.qtdAgendas||''}" placeholder="Ex: 12"/></div>
     <div class="fr" id="p-cancel-box" style="display:${p?.status==='cancelado'?'block':'none'}">
       <label>Motivo do cancelamento</label>
       <textarea id="p-cancel-reason" placeholder="Ex: Cliente desistiu da migração">${esc(p?.cancelReason||'')}</textarea>
@@ -1007,6 +1020,7 @@ async function saveProj(){
     dateStart:$('p-date-start')?.value||'',dateEnd:$('p-date-end')?.value||'',
     qtdAgendas:+$('p-qtd-agendas')?.value||0,
     status:$('p-status')?.value||'ativo',
+    tipo:$('p-tipo')?.value||'implantacao',
     cancelReason:$('p-cancel-reason')?.value||''};
   // Cancelamento exige justificativa
   if(body.status==='cancelado'&&!body.cancelReason.trim()){
@@ -2757,12 +2771,36 @@ function initDashboard(){
     ownerSel.innerHTML='<option value="">Todos responsáveis</option>'+
       owners.filter(o=>o.active!==false).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
   }
-  const projSel=$('dash-proj');
-  if(projSel && projSel.options.length<=1){
-    const ordenados=projects.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
-    projSel.innerHTML='<option value="">Todos os projetos</option>'+
-      ordenados.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  const dlp=$('dl-dash-projs');
+  if(dlp && !dlp.innerHTML){
+    dlp.innerHTML=projects.slice()
+      .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))
+      .map(p=>`<option value="${esc(p.name)}"></option>`).join('');
   }
+}
+
+// Autocomplete do filtro de projeto no dashboard
+function onDashProjInput(){
+  const txt=$('dash-proj-txt'), hid=$('dash-proj');
+  if(!txt||!hid)return;
+  const termo=txt.value.trim().toLowerCase();
+  let achado=projects.find(p=>(p.name||'').toLowerCase()===termo);
+  if(!achado&&termo){
+    const parciais=projects.filter(p=>(p.name||'').toLowerCase().includes(termo));
+    if(parciais.length===1)achado=parciais[0];
+  }
+  const anterior=hid.value;
+  hid.value=achado?achado.id:'';
+  txt.style.borderColor=termo&&!achado?'#F09595':'var(--border2)';
+  if(anterior!==hid.value)loadDashboard();
+}
+
+function clearDashProj(){
+  const txt=$('dash-proj-txt'), hid=$('dash-proj');
+  if(txt){txt.value='';txt.style.borderColor='var(--border2)';}
+  if(hid)hid.value='';
+  loadDashboard();
+  txt?.focus();
 }
 
 async function loadDashboard(){
@@ -2945,11 +2983,13 @@ function renderDashboard(d){
   // ── Tabela comparativa por projeto ──
   const linhas=projetos.map(p=>{
     const st=PROJ_STATUS[p.situacao]||PROJ_STATUS.ativo;
+    const tp=PROJ_TIPO[p.tipo]||PROJ_TIPO.implantacao;
     const excedeu=p.contratadas>0&&p.realizadas>p.contratadas;
     const cor=corPct(p.pct);
     return `<tr style="${p.situacao==='cancelado'?'opacity:.6':''}">
       <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.nome)}">${esc(p.nome)}</td>
       <td style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.cliente)}">${esc(p.cliente)||'—'}</td>
+      <td><span class="pill ${tp.c}" style="font-size:9px">${tp.l}</span></td>
       <td><span class="pill ${st.c}" style="font-size:9px">${st.l}</span></td>
       <td style="text-align:center;font-weight:500;color:#185FA5">${p.contratadas||'—'}</td>
       <td style="text-align:center">${p.agendadas}</td>
@@ -2974,14 +3014,15 @@ function renderDashboard(d){
       </div>
       <div class="tw"><table style="table-layout:fixed;width:100%">
         <thead><tr>
-          <th style="width:24%">Projeto</th>
-          <th style="width:20%">Cliente</th>
+          <th style="width:21%">Projeto</th>
+          <th style="width:17%">Cliente</th>
+          <th style="width:10%">Tipo</th>
           <th style="width:9%">Situação</th>
-          <th style="width:8%;text-align:center" title="Agendas previstas no contrato">Contrat.</th>
-          <th style="width:8%;text-align:center" title="Dias de agenda marcados">Agend.</th>
-          <th style="width:8%;text-align:center" title="Dias de agenda efetivamente realizados">Realiz.</th>
+          <th style="width:7%;text-align:center" title="Agendas previstas no contrato">Contrat.</th>
+          <th style="width:7%;text-align:center" title="Dias de agenda marcados">Agend.</th>
+          <th style="width:7%;text-align:center" title="Dias de agenda efetivamente realizados">Realiz.</th>
           <th style="width:8%;text-align:center" title="Agendas desmarcadas pelo cliente">Desmarc.</th>
-          <th style="width:15%" title="Realizadas ÷ Contratadas">% Realizado</th>
+          <th style="width:14%" title="Realizadas ÷ Contratadas">% Realizado</th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table></div>

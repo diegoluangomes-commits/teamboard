@@ -177,6 +177,7 @@ async function initDB() {
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS date_start TEXT;
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS date_end   TEXT;
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS status        TEXT DEFAULT 'ativo';
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS tipo          TEXT DEFAULT 'implantacao';
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS cancel_date   TEXT;
     ALTER TABLE clients  ADD COLUMN IF NOT EXISTS contact_name TEXT;
@@ -206,6 +207,7 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
     CREATE INDEX IF NOT EXISTS idx_projects_owner  ON projects(owner_id);
     CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
+    CREATE INDEX IF NOT EXISTS idx_projects_tipo   ON projects(tipo);
     CREATE INDEX IF NOT EXISTS idx_clients_seller  ON clients(seller_id);
     CREATE INDEX IF NOT EXISTS idx_ausencias_owner ON ausencias(owner_id);
     CREATE INDEX IF NOT EXISTS idx_tds_date        ON task_daily_status(date);
@@ -227,6 +229,11 @@ async function initDB() {
   } catch (e) {
     console.warn('[DB] Aviso na migração de senhas:', e.message);
   }
+
+  // ── Migration: projetos já cadastrados entram como Implantação ──
+  await pool.query(
+    `UPDATE projects SET tipo='implantacao' WHERE tipo IS NULL OR tipo=''`
+  ).catch(()=>{});
 
   // ── Migration: trilha de auditoria ──
   await pool.query(`

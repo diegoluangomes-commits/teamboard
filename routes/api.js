@@ -252,7 +252,7 @@ const toProject = r => r ? ({
   sellerId: r.seller_id, ownerId: r.owner_id,
   dateStart: r.date_start||'', dateEnd: r.date_end||'',
   qtdAgendas: r.qtd_agendas||0,
-  status: r.status||'ativo',
+  status: r.status||'ativo', tipo: r.tipo||'implantacao',
   cancelReason: r.cancel_reason||'', cancelDate: r.cancel_date||''
 }) : null;
 
@@ -423,17 +423,17 @@ router.get('/projects', async (req, res) => {
 });
 
 router.post('/projects', requireAdmin, async (req, res) => {
-  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas, status } = req.body;
+  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas, status, tipo } = req.body;
   const id = uuidv4();
   const { rows } = await q(
-    'INSERT INTO projects (id,name,color,descr,client_id,product_id,seller_id,owner_id,date_start,date_end,qtd_agendas,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *',
-    [id, name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null, qtdAgendas||0, status||'ativo']
+    'INSERT INTO projects (id,name,color,descr,client_id,product_id,seller_id,owner_id,date_start,date_end,qtd_agendas,status,tipo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *',
+    [id, name, color||'#185FA5', desc||'', clientId||null, productId||null, sellerId||null, ownerId||null, dateStart||null, dateEnd||null, qtdAgendas||0, status||'ativo', tipo||'implantacao']
   );
   send(res, toProject(rows[0]));
 });
 
 router.put('/projects/:id', async (req, res) => {
-  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas, status, cancelReason } = req.body;
+  const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas, status, cancelReason, tipo } = req.body;
   // Responsável pode editar, mas não pode trocar o cliente nem o responsável do projeto
   let finalClientId = clientId || null;
   let finalOwnerId  = ownerId  || null;
@@ -455,8 +455,8 @@ router.put('/projects/:id', async (req, res) => {
   const motivo = statusFinal === 'cancelado' ? (cancelReason || '') : '';
 
   const { rows } = await q(
-    'UPDATE projects SET name=$1,color=$2,descr=$3,client_id=$4,product_id=$5,seller_id=$6,owner_id=$7,date_start=$8,date_end=$9,qtd_agendas=$10,status=$11,cancel_reason=$12,cancel_date=$13 WHERE id=$14 RETURNING *',
-    [name, color||'#185FA5', desc||'', finalClientId, productId||null, sellerId||null, finalOwnerId, dateStart||null, dateEnd||null, qtdAgendas||0, statusFinal, motivo, cancelDate, req.params.id]
+    'UPDATE projects SET name=$1,color=$2,descr=$3,client_id=$4,product_id=$5,seller_id=$6,owner_id=$7,date_start=$8,date_end=$9,qtd_agendas=$10,status=$11,cancel_reason=$12,cancel_date=$13,tipo=$14 WHERE id=$15 RETURNING *',
+    [name, color||'#185FA5', desc||'', finalClientId, productId||null, sellerId||null, finalOwnerId, dateStart||null, dateEnd||null, qtdAgendas||0, statusFinal, motivo, cancelDate, tipo||'implantacao', req.params.id]
   );
   if (!rows.length) return notFound(res,'Projeto');
   send(res, toProject(rows[0]));
@@ -887,7 +887,7 @@ router.get('/dashboard', async (req, res) => {
 
     // Projetos com dados do cliente
     const { rows: projs } = await q(`
-      SELECT p.id, p.name, p.status, p.qtd_agendas, p.date_start, p.date_end,
+      SELECT p.id, p.name, p.status, p.tipo, p.qtd_agendas, p.date_start, p.date_end,
              p.cancel_reason, p.cancel_date, p.owner_id,
              c.name AS client_name
       FROM projects p
@@ -958,7 +958,7 @@ router.get('/dashboard', async (req, res) => {
 
       return {
         id: p.id, nome: p.name, cliente: p.client_name || '',
-        situacao: p.status || 'ativo',
+        situacao: p.status || 'ativo', tipo: p.tipo || 'implantacao',
         dateStart: p.date_start || '', dateEnd: p.date_end || '',
         cancelReason: p.cancel_reason || '', cancelDate: p.cancel_date || '',
         contratadas, agendadas, realizadas, desmarcadas,

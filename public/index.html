@@ -403,9 +403,15 @@
           <select id="dash-owner" onchange="loadDashboard()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
             <option value="">Todos responsáveis</option>
           </select>
-          <select id="dash-proj" onchange="loadDashboard()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);max-width:200px">
-            <option value="">Todos os projetos</option>
-          </select>
+          <div style="position:relative;display:inline-flex;align-items:center">
+            <input id="dash-proj-txt" list="dl-dash-projs" placeholder="Todos os projetos"
+                   oninput="onDashProjInput()" onfocus="this.select()"
+                   style="font-size:12px;padding:5px 22px 5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);width:185px"/>
+            <datalist id="dl-dash-projs"></datalist>
+            <span onclick="clearDashProj()" title="Limpar"
+                  style="position:absolute;right:7px;cursor:pointer;color:var(--text3);font-size:13px;line-height:1">×</span>
+            <input type="hidden" id="dash-proj"/>
+          </div>
           <select id="dash-status" onchange="loadDashboard()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
             <option value="">Todas as situações</option>
             <option value="ativo">Ativos</option>
