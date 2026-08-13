@@ -2781,16 +2781,96 @@ async function loadDashboard(){
   }
 }
 
+let dashData=null;      // dados carregados do dashboard
+let dashDetalheAtivo=''; // painel de detalhe aberto
+
+// Abre (ou fecha) o painel com a lista de projetos do card clicado
+function dashDetalhe(tipo){
+  const box=$('dash-detalhe');
+  if(!box||!dashData)return;
+  // Clicar de novo no mesmo card fecha o painel
+  if(dashDetalheAtivo===tipo){ box.innerHTML=''; dashDetalheAtivo=''; return; }
+  dashDetalheAtivo=tipo;
+
+  let lista=[], titulo='', vazio='';
+  if(tipo==='atrasados'){
+    lista=dashData.projetos.filter(p=>p.atrasado).sort((a,b)=>b.diasAtraso-a.diasAtraso);
+    titulo='⚠️ Projetos atrasados';
+    vazio='Nenhum projeto atrasado.';
+  } else if(tipo==='desmarcadas'){
+    lista=dashData.projetos.filter(p=>p.desmarcadas>0).sort((a,b)=>b.desmarcadas-a.desmarcadas);
+    titulo='🚫 Projetos com agendas desmarcadas pelo cliente';
+    vazio='Nenhuma agenda desmarcada.';
+  } else {
+    lista=dashData.projetos.slice();
+    titulo='📋 Todos os projetos';
+    vazio='Nenhum projeto.';
+  }
+
+  if(!lista.length){
+    box.innerHTML=`<div class="card-table" style="margin-bottom:14px;padding:20px;text-align:center;color:var(--text3);font-size:12px">${vazio}</div>`;
+    return;
+  }
+
+  const linhas=lista.map(p=>{
+    const st=PROJ_STATUS[p.situacao]||PROJ_STATUS.ativo;
+    // Coluna de destaque muda conforme o tipo de detalhamento
+    let destaque='';
+    if(tipo==='atrasados'){
+      destaque=`<td style="text-align:right;white-space:nowrap">
+        <span style="color:var(--red);font-weight:600;font-size:12px">${p.diasAtraso} dia${p.diasAtraso===1?'':'s'}</span>
+        <div style="font-size:10px;color:var(--text3)">prazo: ${fd(p.dateEnd)}</div></td>`;
+    } else if(tipo==='desmarcadas'){
+      destaque=`<td style="text-align:right;white-space:nowrap">
+        <span style="color:var(--red);font-weight:600;font-size:13px">${p.desmarcadas}</span>
+        <div style="font-size:10px;color:var(--text3)">desmarcada${p.desmarcadas===1?'':'s'}</div></td>`;
+    } else {
+      destaque=`<td style="text-align:right;white-space:nowrap">
+        <span style="font-weight:600;font-size:12px">${p.pct}%</span>
+        <div style="font-size:10px;color:var(--text3)">${p.realizadas}/${p.contratadas||p.agendadas}</div></td>`;
+    }
+    return `<tr onclick="setProj('${p.id}');goPage('board')" style="cursor:pointer" title="Abrir o projeto">
+      <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nome)}</td>
+      <td style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.cliente)||'—'}</td>
+      <td><span class="pill ${st.c}" style="font-size:9px">${st.l}</span></td>
+      ${destaque}
+    </tr>`;
+  }).join('');
+
+  box.innerHTML=`
+    <div class="card-table" style="margin-bottom:14px">
+      <div style="padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:500">${titulo}</span>
+        <span style="font-size:11px;color:var(--text2)">(${lista.length})</span>
+        <button class="btn btn-sm" style="margin-left:auto" onclick="dashDetalhe('${tipo}')">Fechar ×</button>
+      </div>
+      <div class="tw"><table style="table-layout:fixed;width:100%">
+        <thead><tr>
+          <th style="width:38%">Projeto</th>
+          <th style="width:28%">Cliente</th>
+          <th style="width:16%">Situação</th>
+          <th style="width:18%;text-align:right">${tipo==='atrasados'?'Atraso':tipo==='desmarcadas'?'Qtd.':'Realizado'}</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table></div>
+    </div>`;
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
 function renderDashboard(d){
   const box=$('dash-content');if(!box)return;
+  dashData=d; dashDetalheAtivo='';
   const {resumo,projetos,evolucao}=d;
   const a=resumo.agendas, pr=resumo.projetos;
   const corPct=p=>p>=100?'var(--green)':p>=70?'var(--blue)':p>=40?'var(--amber)':'var(--red)';
 
-  // ── Cards de resumo ──
+  // ── Cards de resumo (alguns clicáveis, abrem detalhamento) ──
+  const clicavel='cursor:pointer;transition:border-color .12s';
   const cards=`
     <div class="sbar" style="margin-bottom:14px">
-      <div class="sc flex1"><div class="slabel">Projetos</div><div class="sval">${pr.total}</div>
+      <div class="sc flex1" style="${clicavel}" onclick="dashDetalhe('todos')" title="Ver todos os projetos"
+           onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor=''">
+        <div class="slabel">Projetos 🔍</div><div class="sval">${pr.total}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px">${pr.ativo} ativos · ${pr.concluido} concluídos</div></div>
       <div class="sc flex1"><div class="slabel">Agendas contratadas</div><div class="sval blue">${a.contratadas}</div></div>
       <div class="sc flex1"><div class="slabel">Agendas realizadas</div><div class="sval green">${a.realizadas}</div>
@@ -2798,11 +2878,16 @@ function renderDashboard(d){
       <div class="sc flex1"><div class="slabel">Aproveitamento</div>
         <div class="sval" style="color:${corPct(a.pct)}">${a.pct}%</div>
         <div class="pbar"><div style="height:3px;background:${corPct(a.pct)};width:${Math.min(a.pct,100)}%;border-radius:2px"></div></div></div>
-      <div class="sc flex1"><div class="slabel">Desmarcadas</div><div class="sval red">${a.desmarcadas}</div>
+      <div class="sc flex1" style="${a.desmarcadas?clicavel:''}" ${a.desmarcadas?`onclick="dashDetalhe('desmarcadas')" title="Ver projetos com agendas desmarcadas"
+           onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor=''"`:''}>
+        <div class="slabel">Desmarcadas${a.desmarcadas?' 🔍':''}</div><div class="sval red">${a.desmarcadas}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px">pelo cliente</div></div>
-      <div class="sc flex1"><div class="slabel">Atrasados</div><div class="sval amber">${pr.atrasados}</div>
+      <div class="sc flex1" style="${pr.atrasados?clicavel:''}" ${pr.atrasados?`onclick="dashDetalhe('atrasados')" title="Ver projetos atrasados"
+           onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor=''"`:''}>
+        <div class="slabel">Atrasados${pr.atrasados?' 🔍':''}</div><div class="sval amber">${pr.atrasados}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px">${pr.cancelado} cancelados</div></div>
-    </div>`;
+    </div>
+    <div id="dash-detalhe"></div>`;
 
   // ── Gráfico de evolução mensal ──
   const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];

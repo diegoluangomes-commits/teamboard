@@ -993,6 +993,13 @@ router.get('/dashboard', async (req, res) => {
 
     // ── Totais gerais ──
     const hoje = new Date().toISOString().slice(0, 10);
+    // Marca cada projeto atrasado e calcula quantos dias passaram do prazo
+    porProjeto.forEach(p => {
+      p.atrasado = p.situacao === 'ativo' && !!p.dateEnd && p.dateEnd < hoje && !p.completo;
+      p.diasAtraso = p.atrasado
+        ? Math.floor((new Date(hoje) - new Date(p.dateEnd)) / 86400000)
+        : 0;
+    });
     const resumo = {
       projetos: {
         total:     porProjeto.length,
@@ -1000,8 +1007,7 @@ router.get('/dashboard', async (req, res) => {
         concluido: porProjeto.filter(p => p.situacao === 'concluido').length,
         pausado:   porProjeto.filter(p => p.situacao === 'pausado').length,
         cancelado: porProjeto.filter(p => p.situacao === 'cancelado').length,
-        atrasados: porProjeto.filter(p =>
-          p.situacao === 'ativo' && p.dateEnd && p.dateEnd < hoje && !p.completo).length
+        atrasados: porProjeto.filter(p => p.atrasado).length
       },
       agendas: {
         contratadas: porProjeto.reduce((s, p) => s + p.contratadas, 0),
