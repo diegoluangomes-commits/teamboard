@@ -955,7 +955,6 @@ function projHTML(p) {
       <div class="fr"><label>Produto</label><select id="p-product"><option value="">— nenhum —</option>${products.map(pr=>`<option value="${pr.id}"${p?.productId===pr.id?' selected':''}>${esc(pr.name)}</option>`).join('')}</select></div>
       <div class="fr"><label>Vendedor</label><select id="p-seller"><option value="">— nenhum —</option>${sellers.map(s=>`<option value="${s.id}"${p?.sellerId===s.id?' selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
     </div>
-    <div class="fr"><label>Responsável principal</label><select id="p-owner"><option value="">— nenhum —</option>${owners.map(o=>`<option value="${o.id}"${p?.ownerId===o.id?' selected':''}>${esc(o.name)}</option>`).join('')}</select></div>
     <div class="f2">
       <div class="fr"><label>Data início</label><input type="date" id="p-date-start" value="${p?.dateStart||''}"/></div>
       <div class="fr"><label>Previsão de conclusão</label><input type="date" id="p-date-end" value="${p?.dateEnd||''}"/></div>
@@ -1002,7 +1001,7 @@ function editProj(id){
   editingProj=id;showModal(projHTML(p));
   // Responsável edita o projeto, mas não troca cliente nem responsável principal
   if(currentUser?.perfil!=='admin'){
-    ['p-client','p-owner'].forEach(fid=>{
+    ['p-client'].forEach(fid=>{
       const el=$(fid);if(!el)return;
       el.disabled=true;
       el.style.opacity='.6';
@@ -1016,7 +1015,7 @@ async function saveProj(){
   const name=$('p-name').value.trim();if(!name)return;
   const body={name,color:$('p-color').value,clientId:$('p-client')?.value||null,
     productId:$('p-product')?.value||null,sellerId:$('p-seller')?.value||null,
-    ownerId:$('p-owner')?.value||null,desc:$('p-desc')?.value||'',
+    ownerId:(editingProj?projects.find(x=>x.id===editingProj)?.ownerId:null)||null,desc:$('p-desc')?.value||'',
     dateStart:$('p-date-start')?.value||'',dateEnd:$('p-date-end')?.value||'',
     qtdAgendas:+$('p-qtd-agendas')?.value||0,
     status:$('p-status')?.value||'ativo',
