@@ -2801,6 +2801,11 @@ function dashDetalhe(tipo){
     lista=dashData.projetos.filter(p=>p.desmarcadas>0).sort((a,b)=>b.desmarcadas-a.desmarcadas);
     titulo='🚫 Projetos com agendas desmarcadas pelo cliente';
     vazio='Nenhuma agenda desmarcada.';
+  } else if(tipo==='cancelados'){
+    lista=dashData.projetos.filter(p=>p.situacao==='cancelado')
+      .sort((a,b)=>(b.cancelDate||'').localeCompare(a.cancelDate||''));
+    titulo='❌ Projetos cancelados';
+    vazio='Nenhum projeto cancelado.';
   } else {
     lista=dashData.projetos.slice();
     titulo='📋 Todos os projetos';
@@ -2824,13 +2829,20 @@ function dashDetalhe(tipo){
       destaque=`<td style="text-align:right;white-space:nowrap">
         <span style="color:var(--red);font-weight:600;font-size:13px">${p.desmarcadas}</span>
         <div style="font-size:10px;color:var(--text3)">desmarcada${p.desmarcadas===1?'':'s'}</div></td>`;
+    } else if(tipo==='cancelados'){
+      destaque=`<td style="text-align:right;white-space:nowrap">
+        <span style="font-size:11px;color:var(--text2)">${p.cancelDate?fd(p.cancelDate):'—'}</span>
+        <div style="font-size:10px;color:var(--text3)">${p.realizadas} de ${p.contratadas||p.agendadas} agendas</div></td>`;
     } else {
       destaque=`<td style="text-align:right;white-space:nowrap">
         <span style="font-weight:600;font-size:12px">${p.pct}%</span>
         <div style="font-size:10px;color:var(--text3)">${p.realizadas}/${p.contratadas||p.agendadas}</div></td>`;
     }
     return `<tr onclick="setProj('${p.id}');goPage('board')" style="cursor:pointer" title="Abrir o projeto">
-      <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nome)}</td>
+      <td style="overflow:hidden;text-overflow:ellipsis">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.nome)}</div>
+        ${tipo==='cancelados'&&p.cancelReason?`<div style="font-size:10px;color:var(--text2);margin-top:2px;white-space:normal;line-height:1.3">${esc(p.cancelReason)}</div>`:''}
+      </td>
       <td style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.cliente)||'—'}</td>
       <td><span class="pill ${st.c}" style="font-size:9px">${st.l}</span></td>
       ${destaque}
@@ -2849,7 +2861,7 @@ function dashDetalhe(tipo){
           <th style="width:38%">Projeto</th>
           <th style="width:28%">Cliente</th>
           <th style="width:16%">Situação</th>
-          <th style="width:18%;text-align:right">${tipo==='atrasados'?'Atraso':tipo==='desmarcadas'?'Qtd.':'Realizado'}</th>
+          <th style="width:18%;text-align:right">${tipo==='atrasados'?'Atraso':tipo==='desmarcadas'?'Qtd.':tipo==='cancelados'?'Cancelado em':'Realizado'}</th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table></div>
@@ -2885,7 +2897,11 @@ function renderDashboard(d){
       <div class="sc flex1" style="${pr.atrasados?clicavel:''}" ${pr.atrasados?`onclick="dashDetalhe('atrasados')" title="Ver projetos atrasados"
            onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor=''"`:''}>
         <div class="slabel">Atrasados${pr.atrasados?' 🔍':''}</div><div class="sval amber">${pr.atrasados}</div>
-        <div style="font-size:10px;color:var(--text2);margin-top:2px">${pr.cancelado} cancelados</div></div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">fora do prazo</div></div>
+      <div class="sc flex1" style="${pr.cancelado?clicavel:''}" ${pr.cancelado?`onclick="dashDetalhe('cancelados')" title="Ver projetos cancelados"
+           onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor=''"`:''}>
+        <div class="slabel">Cancelados${pr.cancelado?' 🔍':''}</div><div class="sval red">${pr.cancelado}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">projetos encerrados</div></div>
     </div>
     <div id="dash-detalhe"></div>`;
 
@@ -2972,24 +2988,7 @@ function renderDashboard(d){
     </div>`
     :'<div style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Nenhum projeto encontrado para os filtros.</div>';
 
-  // ── Cancelados com motivo ──
-  const cancelados=projetos.filter(p=>p.situacao==='cancelado'&&p.cancelReason);
-  const boxCancel=cancelados.length?`
-    <div class="card-table" style="margin-top:14px">
-      <div style="padding:10px 14px;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:500">
-        Projetos cancelados — motivos
-      </div>
-      ${cancelados.map(p=>`
-        <div style="padding:9px 14px;border-bottom:0.5px solid var(--border);display:flex;gap:10px;align-items:flex-start">
-          <div style="flex:1">
-            <div style="font-size:12px;font-weight:500">${esc(p.nome)}</div>
-            <div style="font-size:11px;color:var(--text2);margin-top:2px">${esc(p.cancelReason)}</div>
-          </div>
-          ${p.cancelDate?`<div style="font-size:10px;color:var(--text3);white-space:nowrap">${fd(p.cancelDate)}</div>`:''}
-        </div>`).join('')}
-    </div>`:'';
-
-  box.innerHTML=cards+grafico+tabela+boxCancel;
+  box.innerHTML=cards+grafico+tabela;
 }
 
 // ── Relatórios ─────────────────────────────────────────────
