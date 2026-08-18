@@ -894,10 +894,13 @@ router.post('/task-daily-status', async (req, res) => {
         if (dow !== 0 && dow !== 6) uteis.push(d.toISOString().slice(0, 10));
       }
       const { rows: marcados } = await q(
-        `SELECT date FROM task_daily_status WHERE task_id=$1 AND status='done'`, [taskId]
+        `SELECT date, status FROM task_daily_status WHERE task_id=$1 AND status IN ('done','cancel')`, [taskId]
       );
-      const setDone = new Set(marcados.map(m => m.date));
-      const todosFeitos = uteis.length > 0 && uteis.every(d => setDone.has(d));
+      const setDone   = new Set(marcados.filter(m => m.status === 'done').map(m => m.date));
+      const setCancel = new Set(marcados.filter(m => m.status === 'cancel').map(m => m.date));
+      // Dias desmarcados pelo cliente não impedem a conclusão da tarefa
+      const pendentes = uteis.filter(d => !setCancel.has(d));
+      const todosFeitos = pendentes.length > 0 && pendentes.every(d => setDone.has(d));
       const novo = todosFeitos ? 'done' : (t.status === 'done' ? 'progress' : t.status);
       if (novo !== t.status) {
         await q('UPDATE tasks SET status=$1 WHERE id=$2', [novo, taskId]);
@@ -944,20 +947,23 @@ router.get('/dashboard', async (req, res) => {
       const temPeriodo = t.date_start && t.date_end && t.date_start !== t.date_end;
       if (!temPeriodo) {
         const dref = t.date_start || t.date || '';
-        return { agendados: dref ? 1 : 0, realizados: t.status === 'done' ? 1 : 0, dias: dref ? [dref] : [] };
+        return { agendados: dref ? 1 : 0, realizados: t.status === 'done' ? 1 : 0, desmarcados: 0, dias: dref ? [dref] : [] };
       }
-      let agendados = 0, realizados = 0; const dias = [];
+      let agendados = 0, realizados = 0, desmarcados = 0; const dias = [];
       const ini = new Date(t.date_start + 'T00:00:00');
       const fim = new Date(t.date_end + 'T00:00:00');
       for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
         const dow = d.getDay();
         if (dow === 0 || dow === 6) continue; // ignora fim de semana
         const ds = d.toISOString().slice(0, 10);
+        const st = dailyMap[t.id + '|' + ds];
+        // Dia desmarcado pelo cliente sai do total agendado
+        if (st === 'cancel') { desmarcados++; continue; }
         agendados++;
         dias.push(ds);
-        if (dailyMap[t.id + '|' + ds] === 'done') realizados++;
+        if (st === 'done') realizados++;
       }
-      return { agendados, realizados, dias };
+      return { agendados, realizados, desmarcados, dias };
     };
 
     const dentroDoAno = (d) => !ano || (d || '').startsWith(ano);
@@ -975,11 +981,17 @@ router.get('/dashboard', async (req, res) => {
         if (!dentroDoAno(dref)) return;
         totalTarefas++;
         if (t.status === 'done')   tarefasConcluidas++;
-        if (t.status === 'cancel') { desmarcadas++; return; }
         if (t.status === 'na')     { naoAplicavel++; return; }
+        // Tarefa inteira desmarcada: conta todos os dias úteis que ela ocupava
+        if (t.status === 'cancel') {
+          const c0 = contarDias(t);
+          desmarcadas += (c0.agendados + c0.desmarcados) || 1;
+          return;
+        }
         const c = contarDias(t);
-        agendadas  += c.agendados;
-        realizadas += c.realizados;
+        agendadas   += c.agendados;
+        realizadas  += c.realizados;
+        desmarcadas += c.desmarcados;
       });
 
       const contratadas = p.qtd_agendas || 0;

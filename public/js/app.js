@@ -1670,6 +1670,8 @@ function renderCalendar(){
     const start=t.dateStart||t.date||'';
     const end=t.dateEnd||t.date||'';
     if(!start && !end) return false;
+    // Dia desmarcado pelo cliente some do calendário
+    if(getDailyStatus(t.id, ds)==='cancel') return false;
     if(start && end) return ds>=start && ds<=end;
     return ds===start || ds===end;
   }
@@ -1871,6 +1873,8 @@ function calRenderDayList(ft, day){
     const start=t.dateStart||t.date||'';
     const end=t.dateEnd||t.date||'';
     if(!start&&!end)return false;
+    // Dia desmarcado pelo cliente some do calendário
+    if(getDailyStatus(t.id, ds)==='cancel')return false;
     if(start&&end)return ds>=start&&ds<=end;
     return ds===start||ds===end;
   }
@@ -1930,7 +1934,7 @@ function calRenderDayList(ft, day){
 
     return `<div data-task-id="${t.id}" data-date="${dateStr}" style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);transition:background .1s;${isDone?'opacity:.75':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
       <div style="width:3px;height:40px;border-radius:2px;background:${ownerColor};flex-shrink:0"></div>
-      <div id="${checkId}" onclick="${onclick}" title="${isDone?'Marcar como pendente':'Marcar como realizado'}"
+      <div id="${checkId}" onclick="${onclick}" title="${isPeriod?(isDone?'Clique para registrar que o cliente desmarcou este dia':'Marcar como realizado'):(isDone?'Marcar como pendente':'Marcar como realizado')}"
         style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${isDone?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${isDone?'#3B6D11':'transparent'};flex-shrink:0">
         ${isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
       </div>
@@ -1967,12 +1971,27 @@ async function toggleDoneCalTask(id, dateStr){
   const isPeriod=hasPeriod(t);
 
   if(isPeriod && dateStr){
-    // ── Tarefa com período: grava status só para o dia clicado ──
+    // ── Tarefa com período: ciclo pendente → realizado → desmarcado ──
     const current=getDailyStatus(id, dateStr)||'pending';
-    const newStatus=current==='done'?'pending':'done';
+    const newStatus = current==='pending' ? 'done'
+                    : current==='done'    ? 'cancel'
+                    : 'pending';
     const isDone=newStatus==='done';
+    if(newStatus==='cancel'&&!confirm(`Registrar que o cliente desmarcou a agenda do dia ${fd(dateStr)}?\n\nO dia sai do calendário e não conta como pendência do responsável.`)){
+      return; // usuário desistiu — mantém como estava
+    }
     const resp=await api('POST','/task-daily-status',{taskId:id, date:dateStr, status:newStatus});
     taskDailyStatus[id+'|'+dateStr]=newStatus;
+    // Ao desmarcar, o dia some do calendário — precisa redesenhar
+    if(newStatus==='cancel'){
+      if(resp?.taskStatus){
+        allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:resp.taskStatus}:x);
+        tasks=tasks.map(x=>x.id===id?{...x,status:resp.taskStatus}:x);
+      }
+      renderCalendar();
+      showToast('🚫 Agenda de '+fd(dateStr)+' desmarcada pelo cliente','success');
+      return;
+    }
     // O servidor sincroniza o status da tarefa quando todos os dias ficam concluídos
     if(resp?.taskStatus){
       allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:resp.taskStatus}:x);
@@ -1984,7 +2003,7 @@ async function toggleDoneCalTask(id, dateStr){
     if(chk){
       chk.style.borderColor=isDone?'#3B6D11':'#ccc';
       chk.style.background=isDone?'#3B6D11':'transparent';
-      chk.title=isDone?'Marcar como pendente':'Marcar como realizado';
+      chk.title=isDone?'Clique para registrar que o cliente desmarcou este dia':'Marcar como realizado';
       chk.innerHTML=isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':'';
       const row=chk.closest('[data-task-id]');
       if(row) row.style.opacity=isDone?'.75':'1';
@@ -3211,9 +3230,11 @@ async function exportRel2(){
         const end=new Date(t.dateEnd+'T00:00:00');
         for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
           const dow=d.getDay(); if(dow===0||dow===6) continue;
-          diasAgendados++;
           const dateStr=d.toISOString().slice(0,10);
-          if(getDailyStatus(t.id,dateStr)==='done') realizados++;
+          const sd=getDailyStatus(t.id,dateStr);
+          if(sd==='cancel') continue; // desmarcado pelo cliente não conta
+          diasAgendados++;
+          if(sd==='done') realizados++;
         }
       } else {
         diasAgendados++;
