@@ -46,7 +46,8 @@ const ENTIDADES = {
 };
 
 // Campos que nunca entram no log
-const CAMPOS_OCULTOS = ['password','senha','token','secret'];
+const CAMPOS_OCULTOS = ['password','senha','token','secret',
+  'id','createdat','created_at','comments','meet','taskid','apikey'];
 
 // Rótulos amigáveis para os campos
 const ROTULOS = {
@@ -56,22 +57,71 @@ const ROTULOS = {
   priority:'Prioridade', turno:'Turno', desc:'Descrição', notes:'Observações',
   qtdAgendas:'Qtd. agendas', cancelReason:'Motivo do cancelamento',
   classification:'Classificação', perfil:'Perfil', active:'Ativo', group:'Grupo',
-  contactName:'Contato', contactRole:'Cargo do contato'
+  contactName:'Contato', contactRole:'Cargo do contato', tipo:'Tipo', color:'Cor'
 };
 
-// Compara o estado anterior com o novo e devolve apenas o que mudou
-function diffValores(antes, depois) {
+// Traduz códigos internos para os textos que aparecem na tela
+const VALORES = {
+  status: {
+    done:'Concluído', pending:'Pendente', progress:'Em andamento',
+    na:'Não aplicável', cancel:'Cliente desmarcou',
+    ativo:'Ativo', concluido:'Concluído', pausado:'Pausado', cancelado:'Cancelado'
+  },
+  priority: { high:'Alta', medium:'Média', low:'Baixa' },
+  turno:    { manha:'Manhã', tarde:'Tarde' },
+  perfil:   { admin:'Administrador', responsavel:'Responsável' },
+  tipo:     { implantacao:'Implantação', treinamento:'Treinamento', servicos:'Serviços' },
+  active:   { true:'Sim', false:'Não' },
+  group:    { 0:'Boas Vindas', 1:'Acessos', 2:'Validação', 3:'Acompanhamento' }
+};
+
+// Campos que guardam id de outra tabela → onde buscar o nome
+const REFERENCIAS = {
+  clientId:'clients', productId:'products', sellerId:'sellers',
+  ownerId:'owners', projId:'projects', taskId:'tasks'
+};
+
+// Converte um id no nome do registro (ou devolve o próprio valor se não achar)
+async function nomePorId(campo, valor) {
+  const tabela = REFERENCIAS[campo];
+  if (!tabela || !valor) return valor;
+  try {
+    const { rows } = await q(`SELECT name FROM ${tabela} WHERE id=$1`, [valor]);
+    return rows[0]?.name || valor;
+  } catch { return valor; }
+}
+
+// Deixa o valor legível: traduz códigos, resolve ids e formata datas
+async function valorLegivel(campo, valor) {
+  if (valor === null || valor === undefined || valor === '') return '(vazio)';
+  const v = String(valor);
+  if (VALORES[campo] && VALORES[campo][v] !== undefined) return VALORES[campo][v];
+  if (REFERENCIAS[campo]) return await nomePorId(campo, v);
+  // Datas ISO viram formato brasileiro
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const [a,m,d] = v.split('-');
+    return `${d}/${m}/${a}`;
+  }
+  return v;
+}
+
+// Compara o estado anterior com o novo e devolve apenas o que mudou, já traduzido
+async function diffValores(antes, depois) {
   const mudancas = {};
   if (!depois) return mudancas;
-  Object.keys(depois).forEach(k => {
-    if (CAMPOS_OCULTOS.includes(k.toLowerCase())) return;
+  for (const k of Object.keys(depois)) {
+    if (CAMPOS_OCULTOS.includes(k.toLowerCase())) continue;
     const vAntes  = antes ? antes[k] : undefined;
     const vDepois = depois[k];
-    if (typeof vDepois === 'object' && vDepois !== null) return; // ignora objetos/arrays
+    if (typeof vDepois === 'object' && vDepois !== null) continue; // ignora objetos/arrays
     const a = vAntes  === null || vAntes  === undefined ? '' : String(vAntes);
     const d = vDepois === null || vDepois === undefined ? '' : String(vDepois);
-    if (a !== d) mudancas[ROTULOS[k] || k] = { de: a, para: d };
-  });
+    if (a === d) continue;
+    mudancas[ROTULOS[k] || k] = {
+      de:   await valorLegivel(k, a),
+      para: await valorLegivel(k, d)
+    };
+  }
   return mudancas;
 }
 
@@ -116,7 +166,9 @@ router.use(async (req, res, next) => {
   if (!entity) return next();
 
   const id = partes[1] && partes[1] !== 'stats' ? partes[1] : null;
-  const action = metodo === 'POST' ? (id ? 'editar' : 'criar')
+  // Marcar agenda do dia é sempre uma edição, nunca criação de registro novo
+  const action = recurso === 'task-daily-status' ? 'editar'
+               : metodo === 'POST' ? (id ? 'editar' : 'criar')
                : metodo === 'DELETE' ? 'excluir' : 'editar';
 
   // Estado anterior — necessário para o diff e para saber o nome do excluído
@@ -132,26 +184,40 @@ router.use(async (req, res, next) => {
   const jsonOriginal = res.json.bind(res);
   res.json = (body) => {
     if (res.statusCode < 400) {
-      const nome = body?.name || antes?.name || null;
-      let changes = {};
-      if (action === 'excluir') {
-        changes = antes?.name ? { Registro: { de: antes.name, para: '(excluído)' } } : {};
-      } else if (action === 'editar' && antes) {
-        // Converte snake_case do banco para camelCase do corpo da requisição
-        const antesCamel = {};
-        Object.keys(antes).forEach(k => {
-          antesCamel[k.replace(/_([a-z])/g, (_,c) => c.toUpperCase())] = antes[k];
+      // Monta e grava em segundo plano — não atrasa a resposta ao usuário
+      (async () => {
+        let nome = body?.name || antes?.name || null;
+        let changes = {};
+
+        if (recurso === 'task-daily-status') {
+          // Caso especial: a agenda de um dia. Mostra a tarefa e o dia, não os ids.
+          const { taskId, date, status } = req.body || {};
+          nome = await nomePorId('taskId', taskId);
+          const dia = await valorLegivel('date', date);
+          changes = { [`Agenda de ${dia}`]: {
+            de: '—',
+            para: await valorLegivel('status', status)
+          }};
+        } else if (action === 'excluir') {
+          changes = antes?.name ? { Registro: { de: antes.name, para: '(excluído)' } } : {};
+        } else if (action === 'editar' && antes) {
+          // Converte snake_case do banco para camelCase do corpo da requisição
+          const antesCamel = {};
+          Object.keys(antes).forEach(k => {
+            antesCamel[k.replace(/_([a-z])/g, (_,c) => c.toUpperCase())] = antes[k];
+          });
+          changes = await diffValores(antesCamel, req.body);
+        } else if (action === 'criar') {
+          changes = await diffValores({}, req.body);
+        }
+
+        registrarAuditoria(req, {
+          action, entity,
+          entityId: id || body?.id || (req.body?.taskId ?? null),
+          entityName: nome,
+          changes
         });
-        changes = diffValores(antesCamel, req.body);
-      } else if (action === 'criar') {
-        changes = diffValores({}, req.body);
-      }
-      registrarAuditoria(req, {
-        action, entity,
-        entityId: id || body?.id || null,
-        entityName: nome,
-        changes
-      });
+      })().catch(e => console.warn('[AUDIT] Falha ao montar registro:', e.message));
     }
     return jsonOriginal(body);
   };
