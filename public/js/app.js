@@ -1670,8 +1670,9 @@ function renderCalendar(){
     const start=t.dateStart||t.date||'';
     const end=t.dateEnd||t.date||'';
     if(!start && !end) return false;
-    // Dia desmarcado pelo cliente some do calendário
+    // Agenda desmarcada pelo cliente some do calendário
     if(getDailyStatus(t.id, ds)==='cancel') return false;
+    if(t.status==='cancel' && !hasPeriod(t)) return false;
     if(start && end) return ds>=start && ds<=end;
     return ds===start || ds===end;
   }
@@ -1873,8 +1874,9 @@ function calRenderDayList(ft, day){
     const start=t.dateStart||t.date||'';
     const end=t.dateEnd||t.date||'';
     if(!start&&!end)return false;
-    // Dia desmarcado pelo cliente some do calendário
+    // Agenda desmarcada pelo cliente some do calendário
     if(getDailyStatus(t.id, ds)==='cancel')return false;
+    if(t.status==='cancel' && !hasPeriod(t))return false;
     if(start&&end)return ds>=start&&ds<=end;
     return ds===start||ds===end;
   }
@@ -1938,9 +1940,9 @@ function calRenderDayList(ft, day){
         style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${isDone?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${isDone?'#3B6D11':'transparent'};flex-shrink:0">
         ${isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
       </div>
-      ${isPeriod?`<div onclick="event.stopPropagation();desmarcarDia('${t.id}','${dateStr}')" title="Cliente desmarcou esta agenda"
+      <div onclick="event.stopPropagation();desmarcarDia('${t.id}','${isPeriod?dateStr:''}')" title="Cliente desmarcou esta agenda"
         style="width:18px;height:18px;border-radius:4px;border:1.5px solid #E8B4B4;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:#A32D2D;font-size:11px;line-height:1;flex-shrink:0;background:transparent"
-        onmouseover="this.style.background='#FCEBEB';this.style.borderColor='#A32D2D'" onmouseout="this.style.background='transparent';this.style.borderColor='#E8B4B4'">&#10005;</div>`:''}
+        onmouseover="this.style.background='#FCEBEB';this.style.borderColor='#A32D2D'" onmouseout="this.style.background='transparent';this.style.borderColor='#E8B4B4'">&#10005;</div>
       <div style="flex:1;min-width:0;cursor:pointer" onclick="openEditTask('${t.id}')">
         <div data-task-name="${nameId}" style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${isDone?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:6px">
@@ -1967,17 +1969,31 @@ function calNav(d){
   loadDailyStatusForMonth(calY, calM).then(renderCalendar);
 }
 
-// Registra que o cliente desmarcou a agenda de um dia específico
+// Registra que o cliente desmarcou a agenda.
+// Com período: desmarca só o dia informado. Dia único: desmarca a tarefa inteira.
 async function desmarcarDia(id, dateStr){
-  if(!confirm(`Registrar que o cliente desmarcou a agenda do dia ${fd(dateStr)}?\n\nO dia sai do calendário e não conta como pendência do responsável.`))return;
-  const resp=await api('POST','/task-daily-status',{taskId:id, date:dateStr, status:'cancel'});
-  taskDailyStatus[id+'|'+dateStr]='cancel';
-  if(resp?.taskStatus){
-    allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:resp.taskStatus}:x);
-    tasks=tasks.map(x=>x.id===id?{...x,status:resp.taskStatus}:x);
+  const t=allCalTasks.find(x=>x.id===id)||tasks.find(x=>x.id===id);
+  if(!t)return;
+  const isPeriod=hasPeriod(t);
+  const quando=isPeriod?dateStr:(t.dateStart||t.date||'');
+
+  if(!confirm(`Registrar que o cliente desmarcou a agenda${quando?' do dia '+fd(quando):''}?\n\n${isPeriod?'O dia sai do calendário':'A agenda sai do calendário'} e não conta como pendência do responsável.`))return;
+
+  if(isPeriod&&dateStr){
+    const resp=await api('POST','/task-daily-status',{taskId:id, date:dateStr, status:'cancel'});
+    taskDailyStatus[id+'|'+dateStr]='cancel';
+    if(resp?.taskStatus){
+      allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:resp.taskStatus}:x);
+      tasks=tasks.map(x=>x.id===id?{...x,status:resp.taskStatus}:x);
+    }
+  } else {
+    // Dia único: o status da própria tarefa passa a "Cliente desmarcou"
+    await api('PUT','/tasks/'+id,{...t,status:'cancel'});
+    allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:'cancel'}:x);
+    tasks=tasks.map(x=>x.id===id?{...x,status:'cancel'}:x);
   }
   renderCalendar();
-  showToast('🚫 Agenda de '+fd(dateStr)+' desmarcada pelo cliente','success');
+  showToast('🚫 Agenda'+(quando?' de '+fd(quando):'')+' desmarcada pelo cliente','success');
 }
 
 async function toggleDoneCalTask(id, dateStr){
