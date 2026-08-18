@@ -875,7 +875,40 @@ router.post('/task-daily-status', async (req, res) => {
      ON CONFLICT (task_id, date) DO UPDATE SET status=$3, updated_at=NOW()`,
     [taskId, date, status]
   );
-  send(res, { ok: true, taskId, date, status });
+
+  // Sincroniza o status da tarefa com os dias marcados:
+  // todos os dias úteis concluídos → tarefa Concluída; senão volta para Em andamento
+  let taskStatus = null;
+  try {
+    const { rows: [t] } = await q(
+      'SELECT status, date_start, date_end FROM tasks WHERE id=$1', [taskId]
+    );
+    const temPeriodo = t && t.date_start && t.date_end && t.date_start !== t.date_end;
+    if (temPeriodo && t.status !== 'cancel' && t.status !== 'na') {
+      // Monta a lista de dias úteis do período
+      const uteis = [];
+      const ini = new Date(t.date_start + 'T00:00:00');
+      const fim = new Date(t.date_end + 'T00:00:00');
+      for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) uteis.push(d.toISOString().slice(0, 10));
+      }
+      const { rows: marcados } = await q(
+        `SELECT date FROM task_daily_status WHERE task_id=$1 AND status='done'`, [taskId]
+      );
+      const setDone = new Set(marcados.map(m => m.date));
+      const todosFeitos = uteis.length > 0 && uteis.every(d => setDone.has(d));
+      const novo = todosFeitos ? 'done' : (t.status === 'done' ? 'progress' : t.status);
+      if (novo !== t.status) {
+        await q('UPDATE tasks SET status=$1 WHERE id=$2', [novo, taskId]);
+        taskStatus = novo;
+      }
+    }
+  } catch (e) {
+    console.warn('[SYNC] Falha ao sincronizar status da tarefa:', e.message);
+  }
+
+  send(res, { ok: true, taskId, date, status, taskStatus });
 });
 
 // ── Dashboard ──────────────────────────────────────────────

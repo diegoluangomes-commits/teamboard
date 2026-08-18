@@ -587,6 +587,7 @@ function taskHTML(t) {
       <div class="fr"><label>Status</label><select id="f-status">${sOpts}</select></div>
       <div class="fr"><label>Prioridade</label><select id="f-priority">${pOpts}</select></div>
     </div>
+    <div id="f-periodo-aviso" style="display:none"></div>
     <div class="f2">
       <div class="fr"><label>Responsável</label><select id="f-owner"></select></div>
       <div class="fr"><label>Prazo</label><input type="date" id="f-date" value="${t?.date||''}"/></div>
@@ -739,6 +740,49 @@ function openEditTask(id){
   pendingMeet=t.meet?{...t.meet}:null;
   showModal(taskHTML(t));
   if($('f-owner'))$('f-owner').value=t.ownerId||'';
+  aplicarAvisoPeriodo(t);
+}
+
+// Tarefas com período são contadas dia a dia — avisa o usuário e trava o Status para não-admin
+function aplicarAvisoPeriodo(t){
+  const box=$('f-periodo-aviso');
+  if(!box||!t)return;
+  const temPeriodo=t.dateStart&&t.dateEnd&&t.dateStart!==t.dateEnd;
+  if(!temPeriodo){box.style.display='none';return;}
+
+  // Conta os dias úteis do período e quantos já foram marcados
+  const uteis=[];
+  const ini=new Date(t.dateStart+'T00:00:00'), fim=new Date(t.dateEnd+'T00:00:00');
+  for(let d=new Date(ini);d<=fim;d.setDate(d.getDate()+1)){
+    const dow=d.getDay();
+    if(dow!==0&&dow!==6)uteis.push(d.toISOString().slice(0,10));
+  }
+  const feitos=uteis.filter(d=>getDailyStatus(t.id,d)==='done').length;
+  const total=uteis.length;
+  const completo=total>0&&feitos===total;
+
+  box.style.display='block';
+  box.innerHTML=`
+    <div style="background:${completo?'var(--green-bg)':'var(--blue-bg)'};border:0.5px solid ${completo?'#97C459':'#85B7EB'};
+                color:${completo?'#27500A':'#0C447C'};border-radius:var(--r-md);padding:9px 11px;font-size:11px;margin-bottom:11px">
+      <div style="font-weight:600;margin-bottom:3px">
+        📅 Agenda de ${total} dia${total===1?'':'s'} · ${feitos} de ${total} realizado${feitos===1?'':'s'}
+      </div>
+      <div style="line-height:1.4">
+        ${completo
+          ? 'Todos os dias foram marcados — o Status já foi atualizado para Concluído automaticamente.'
+          : 'Marque cada dia no <strong>Calendário</strong> para contar nos relatórios. Alterar o Status aqui <strong>não</strong> conta as agendas.'}
+      </div>
+    </div>`;
+
+  // Com período, o Status é controlado pelos dias — só admin altera manualmente
+  const sel=$('f-status');
+  if(sel&&currentUser?.perfil!=='admin'){
+    sel.disabled=true;
+    sel.style.opacity='.6';
+    sel.style.cursor='not-allowed';
+    sel.title='O Status é definido pelas agendas marcadas no calendário';
+  }
 }
 
 async function submitComment(){
@@ -1927,8 +1971,13 @@ async function toggleDoneCalTask(id, dateStr){
     const current=getDailyStatus(id, dateStr)||'pending';
     const newStatus=current==='done'?'pending':'done';
     const isDone=newStatus==='done';
-    await api('POST','/task-daily-status',{taskId:id, date:dateStr, status:newStatus});
+    const resp=await api('POST','/task-daily-status',{taskId:id, date:dateStr, status:newStatus});
     taskDailyStatus[id+'|'+dateStr]=newStatus;
+    // O servidor sincroniza o status da tarefa quando todos os dias ficam concluídos
+    if(resp?.taskStatus){
+      allCalTasks=allCalTasks.map(x=>x.id===id?{...x,status:resp.taskStatus}:x);
+      tasks=tasks.map(x=>x.id===id?{...x,status:resp.taskStatus}:x);
+    }
     // Atualiza DOM cirurgicamente
     const checkId=`cal-check-${id}--${dateStr}`;
     const chk=document.getElementById(checkId);
