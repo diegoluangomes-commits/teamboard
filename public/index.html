@@ -74,6 +74,10 @@
       <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="1" width="9" height="11" rx="1.2"/><line x1="4" y1="4" x2="9" y2="4"/><line x1="4" y1="6.5" x2="9" y2="6.5"/><line x1="4" y1="9" x2="7" y2="9"/></svg>
       Relatórios
     </div>
+    <div class="ni" id="ni-privacidade" onclick="goPage('privacidade')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="6" width="7" height="5.5" rx="1"/><path d="M4.7 6V4.3a1.8 1.8 0 0 1 3.6 0V6"/></svg>
+      Privacidade
+    </div>
     <div class="ni" id="ni-audit" onclick="goPage('audit')">
       <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6.5 1.5 L11 3.5 v3 c0 2.6-1.9 4.6-4.5 5.5 C3.9 11.1 2 9.1 2 6.5 v-3 z"/><polyline points="4.6,6.4 6,7.8 8.6,5"/></svg>
       Auditoria
@@ -358,6 +362,51 @@
       </div>
     </div>
 
+    <!-- Privacidade / LGPD -->
+    <div class="page" id="page-privacidade">
+      <div class="ph"><div class="ptitle">Privacidade e Proteção de Dados</div></div>
+
+      <div class="card-table" style="padding:18px;margin-bottom:14px;max-width:900px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px">Política de Privacidade — TeamSolidez</div>
+        <div style="font-size:12px;line-height:1.65;color:var(--text2)">
+
+          <p style="margin-bottom:11px"><strong style="color:var(--text)">Controlador dos dados</strong><br>
+          Solidez Soluções Empresariais</p>
+
+          <p style="margin-bottom:11px"><strong style="color:var(--text)">Encarregado (DPO)</strong><br>
+          <a href="mailto:lgpd@solidez.net" style="color:var(--blue)">lgpd@solidez.net</a></p>
+
+          <p style="margin-bottom:11px"><strong style="color:var(--text)">Finalidade do tratamento</strong><br>
+          Gestão de projetos de implantação, agendamento de atendimentos e comunicação sobre os serviços contratados.</p>
+
+          <p style="margin-bottom:11px"><strong style="color:var(--text)">Dados tratados</strong><br>
+          <em>Contatos de clientes:</em> nome, cargo, telefone e e-mail.<br>
+          <em>Equipe interna:</em> nome, e-mail, tarefas atribuídas e períodos de ausência.</p>
+
+          <p style="margin-bottom:11px"><strong style="color:var(--text)">Base legal</strong><br>
+          Execução de contrato (art. 7º, V) para dados de clientes e obrigações contratuais e trabalhistas (art. 7º, II e V) para dados da equipe.</p>
+
+          <p style="margin-bottom:11px"><strong style="color:var(--text)">Prazo de retenção</strong><br>
+          Os dados são mantidos por <strong>5 anos</strong> após o encerramento da relação contratual. Após esse prazo, os dados pessoais são removidos e permanece apenas o histórico do projeto, sem identificação pessoal.</p>
+
+          <p style="margin-bottom:11px"><strong style="color:var(--text)">Compartilhamento</strong><br>
+          Os dados não são compartilhados com terceiros. A hospedagem é feita pela Render (Estados Unidos), com transferência internacional amparada em cláusulas contratuais padrão.</p>
+
+          <p style="margin-bottom:11px"><strong style="color:var(--text)">Segurança aplicada</strong><br>
+          Acesso restrito por login individual, senhas criptografadas, permissões por perfil, comunicação por HTTPS e registro de todas as operações realizadas no sistema.</p>
+
+          <p style="margin-bottom:11px"><strong style="color:var(--text)">Direitos do titular (art. 18)</strong><br>
+          O titular pode solicitar confirmação do tratamento, acesso aos dados, correção, anonimização, portabilidade e eliminação. As solicitações devem ser enviadas para <a href="mailto:lgpd@solidez.net" style="color:var(--blue)">lgpd@solidez.net</a> e são atendidas em até 15 dias.</p>
+
+          <div style="font-size:11px;color:var(--text3);border-top:0.5px solid var(--border);padding-top:10px;margin-top:14px">
+            Última atualização: agosto de 2026
+          </div>
+        </div>
+      </div>
+
+      <div id="lgpd-admin"></div>
+    </div>
+
     <!-- Auditoria -->
     <div class="page" id="page-audit">
       <div class="ph">
@@ -375,6 +424,8 @@
             <option value="excluir">Exclusão</option>
             <option value="login">Login</option>
             <option value="login_falhou">Login falhado</option>
+            <option value="exportar_lgpd">Exportação LGPD</option>
+            <option value="anonimizar_lgpd">Remoção LGPD</option>
           </select>
           <select id="aud-entity" onchange="loadAudit(1)" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
             <option value="">Todos os tipos</option>

@@ -1308,7 +1308,11 @@ function clientHTML(c){
     <div class="fr"><label>Data de entrada</label><input type="date" id="c-date" value="${c?.date||''}"/></div>
 
     <div class="section-sep"></div>
-    <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;font-weight:500;margin-bottom:9px">👤 Contato</div>
+    <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;font-weight:500;margin-bottom:6px">👤 Contato</div>
+    <div style="font-size:10px;color:var(--text3);line-height:1.45;margin-bottom:9px;background:var(--surface2);border-radius:var(--r-md);padding:7px 9px">
+      🔒 Dados usados para agendamento e comunicação sobre os serviços contratados.
+      Guardados por 5 anos após o fim do contrato. Dúvidas: lgpd@solidez.net
+    </div>
     <div class="f2">
       <div class="fr" style="flex:2"><label>Nome do contato</label><input id="c-contact-name" value="${esc(c?.contactName||'')}" placeholder="Ex: Maria Silva"/></div>
       <div class="fr"><label>Cargo / Função</label><input id="c-contact-role" value="${esc(c?.contactRole||'')}" placeholder="Ex: Sócia, Contadora"/></div>
@@ -2726,6 +2730,7 @@ function goPage(p){
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
+  if(p==='privacidade'){ loadPrivacidade(); }
   if(p==='audit'){
     initAudit();
     loadAudit(1);
@@ -2745,6 +2750,119 @@ function switchView(v,el){
   $('view-kan').style.display=v==='kan'?'block':'none';
 }
 
+// ── LGPD ───────────────────────────────────────────────────
+async function loadPrivacidade(){
+  const box=$('lgpd-admin');if(!box)return;
+  // Ferramentas administrativas só para admin
+  if(currentUser?.perfil!=='admin'){box.innerHTML='';return;}
+  box.innerHTML='<div style="padding:20px;color:var(--text3);font-size:12px">Carregando dados de retenção…</div>';
+  try{
+    const d=await api('GET','/lgpd/retencao');
+    renderLgpdAdmin(d);
+  }catch(e){
+    box.innerHTML=`<div style="padding:20px;color:var(--red);font-size:12px">Erro: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderLgpdAdmin(d){
+  const box=$('lgpd-admin');if(!box)return;
+  const vencidos=d.clientes||[];
+
+  const linhas=vencidos.map(c=>`<tr>
+    <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.nome)}</td>
+    <td style="font-size:11px;color:var(--text2)">${esc(c.contato)||'—'}</td>
+    <td style="font-size:11px;color:var(--text2)">${c.ultimaAtividade?fd(c.ultimaAtividade):'—'}</td>
+    <td style="text-align:center;font-size:11px">${c.totalProjetos}</td>
+    <td style="text-align:right">
+      ${c.temDadosPessoais
+        ? `<button class="btn btn-sm btn-red" onclick="anonimizarCliente('${c.id}','${esc(c.nome).replace(/'/g,"\\'")}')">Remover dados pessoais</button>`
+        : '<span style="font-size:10px;color:var(--text3)">já anonimizado</span>'}
+    </td>
+  </tr>`).join('');
+
+  box.innerHTML=`
+    <div class="card-table" style="margin-bottom:14px;max-width:900px">
+      <div style="padding:12px 16px;border-bottom:0.5px solid var(--border)">
+        <div style="font-size:13px;font-weight:600;margin-bottom:3px">📤 Exportar dados de um titular</div>
+        <div style="font-size:11px;color:var(--text2)">Gera um arquivo com tudo que o sistema guarda sobre a pessoa, para atender pedidos de acesso (art. 18).</div>
+      </div>
+      <div style="padding:14px 16px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px">
+          <label style="display:block;font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:3px">Tipo</label>
+          <select id="lgpd-tipo" onchange="lgpdTrocaTipo()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);font-size:12px">
+            <option value="cliente">Cliente</option>
+            <option value="responsavel">Responsável</option>
+          </select>
+        </div>
+        <div style="flex:2;min-width:200px">
+          <label style="display:block;font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:3px">Titular</label>
+          <select id="lgpd-titular" style="width:100%;padding:6px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);font-size:12px"></select>
+        </div>
+        <button class="btn btn-blue" onclick="exportarTitular()">⬇ Exportar</button>
+      </div>
+    </div>
+
+    <div class="card-table" style="max-width:900px">
+      <div style="padding:12px 16px;border-bottom:0.5px solid var(--border)">
+        <div style="font-size:13px;font-weight:600;margin-bottom:3px">
+          🗓️ Retenção — dados além de ${d.prazoAnos} anos
+          <span class="pill ${vencidos.length?'s-pending':'s-done'}" style="font-size:9px;margin-left:6px">${vencidos.length}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text2)">Clientes sem atividade desde ${fd(d.limite)}. Remover os dados pessoais mantém o histórico dos projetos.</div>
+      </div>
+      ${vencidos.length?`
+        <div class="tw"><table style="table-layout:fixed;width:100%">
+          <thead><tr>
+            <th style="width:30%">Cliente</th>
+            <th style="width:20%">Contato</th>
+            <th style="width:16%">Última atividade</th>
+            <th style="width:12%;text-align:center">Projetos</th>
+            <th style="width:22%"></th>
+          </tr></thead>
+          <tbody>${linhas}</tbody>
+        </table></div>`
+      :'<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Nenhum cliente com dados além do prazo de retenção.</div>'}
+    </div>`;
+
+  lgpdTrocaTipo();
+}
+
+// Preenche a lista de titulares conforme o tipo escolhido
+function lgpdTrocaTipo(){
+  const tipo=$('lgpd-tipo')?.value||'cliente';
+  const sel=$('lgpd-titular');if(!sel)return;
+  const lista=tipo==='cliente'
+    ? clients.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))
+    : owners.filter(o=>o.active!==false).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  sel.innerHTML=lista.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
+}
+
+async function exportarTitular(){
+  const tipo=$('lgpd-tipo')?.value, id=$('lgpd-titular')?.value;
+  if(!id){showToast('Selecione um titular','error');return;}
+  try{
+    const d=await api('GET',`/lgpd/titular/${tipo}/${id}`);
+    // Baixa como arquivo JSON legível
+    const nome=(d.titular?.razaoSocial||d.titular?.nome||'titular').replace(/[^\w\s-]/g,'').trim();
+    const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`dados-${nome}-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    showToast('✅ Dados exportados','success');
+  }catch(e){ showToast('Erro ao exportar: '+e.message,'error'); }
+}
+
+async function anonimizarCliente(id,nome){
+  if(!confirm(`Remover os dados pessoais do contato de "${nome}"?\n\nNome, cargo, telefone, e-mail e observações serão apagados.\nO histórico de projetos e tarefas é mantido.\n\nEsta ação não pode ser desfeita.`))return;
+  try{
+    await api('POST','/lgpd/anonimizar/'+id);
+    clients=await api('GET','/clients');
+    showToast('✅ Dados pessoais removidos','success');
+    loadPrivacidade();
+  }catch(e){ showToast('Erro: '+e.message,'error'); }
+}
+
 // ── Auditoria ──────────────────────────────────────────────
 const AUD_ACOES = {
   criar:        { l:'Criou',          c:'s-done',     ic:'＋' },
@@ -2752,6 +2870,8 @@ const AUD_ACOES = {
   excluir:      { l:'Excluiu',        c:'s-cancel',   ic:'✕'  },
   login:        { l:'Entrou',         c:'s-na',       ic:'→'  },
   login_falhou: { l:'Login falhado',  c:'s-cancel',   ic:'⚠'  },
+  exportar_lgpd:  { l:'Exportou dados (LGPD)', c:'s-progress', ic:'📤' },
+  anonimizar_lgpd:{ l:'Removeu dados (LGPD)',  c:'s-cancel',   ic:'🗑' },
   logout:       { l:'Saiu',           c:'s-na',       ic:'←'  }
 };
 let audTimer=null;

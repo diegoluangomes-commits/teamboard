@@ -97,6 +97,8 @@ const ROTULOS = {
 };
 
 // Traduz códigos internos para os textos que aparecem na tela
+const ACOES_LGPD = ['exportar_lgpd','anonimizar_lgpd'];
+
 const VALORES = {
   status: {
     done:'Concluído', pending:'Pendente', progress:'Em andamento',
@@ -1282,6 +1284,139 @@ router.get('/audit/resumo', requireAdmin, async (req, res) => {
       hoje: +hoje.total, exclusoes30d: +exc.total,
       loginsFalhos7d: +falhas.total, total: +geral.total
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── LGPD ───────────────────────────────────────────────────
+// Prazo de retenção definido pela Solidez: 5 anos após o encerramento
+const RETENCAO_ANOS = 5;
+
+// GET /lgpd/titular/:tipo/:id — exporta tudo que o sistema guarda sobre a pessoa
+// Atende ao direito de acesso e portabilidade (art. 18, II e V)
+router.get('/lgpd/titular/:tipo/:id', requireAdmin, async (req, res) => {
+  const { tipo, id } = req.params;
+  if (!['cliente','responsavel'].includes(tipo))
+    return erro400(res, 'Tipo deve ser "cliente" ou "responsavel".');
+
+  try {
+    const agora = new Date().toISOString();
+    const base = {
+      documento: 'Relatório de dados pessoais — LGPD art. 18',
+      emitidoEm: agora,
+      emitidoPor: req.session?.userName || '',
+      controlador: 'Solidez Soluções Empresariais',
+      encarregado: 'lgpd@solidez.net',
+      finalidade: 'Gestão de projetos de implantação, agendamento de atendimentos e comunicação sobre os serviços contratados.',
+      prazoRetencao: `${RETENCAO_ANOS} anos após o encerramento da relação contratual`
+    };
+
+    if (tipo === 'cliente') {
+      const { rows: [c] } = await q('SELECT * FROM clients WHERE id=$1', [id]);
+      if (!c) return notFound(res, 'Cliente');
+
+      const { rows: projs } = await q(
+        `SELECT name, status, tipo, date_start, date_end, qtd_agendas
+         FROM projects WHERE client_id=$1 ORDER BY date_start`, [id]);
+      const { rows: tarefas } = await q(
+        `SELECT t.name, t.status, t.date, t.date_start, t.date_end, p.name AS projeto
+         FROM tasks t JOIN projects p ON p.id=t.proj_id
+         WHERE p.client_id=$1 ORDER BY t.date_start`, [id]);
+
+      base.titular = {
+        tipo: 'Cliente',
+        razaoSocial: c.name,
+        classificacao: c.classification || '',
+        contato: { nome: c.contact_name||'', cargo: c.contact_role||'', telefone: c.phone||'', email: c.email||'' },
+        dataEntrada: c.date || '',
+        observacoes: c.notes || '',
+        cadastradoEm: c.created_at
+      };
+      base.projetos = projs;
+      base.tarefasVinculadas = tarefas.length;
+      base.detalheTarefas = tarefas;
+
+    } else {
+      const { rows: [o] } = await q('SELECT * FROM owners WHERE id=$1', [id]);
+      if (!o) return notFound(res, 'Responsável');
+
+      const { rows: [{ total }] } = await q('SELECT COUNT(*) AS total FROM tasks WHERE owner_id=$1', [id]);
+      const { rows: aus } = await q(
+        'SELECT tipo, date_start, date_end, obs FROM ausencias WHERE owner_id=$1 ORDER BY date_start', [id]);
+      const { rows: usr } = await q(
+        'SELECT name, email, perfil, active FROM users WHERE owner_id=$1', [id]);
+
+      base.titular = {
+        tipo: 'Responsável',
+        nome: o.name,
+        email: o.email || '',
+        iniciais: o.initials || '',
+        ativo: o.active,
+        cadastradoEm: o.created_at
+      };
+      base.tarefasAtribuidas = parseInt(total);
+      base.ausencias = aus;
+      base.acessoAoSistema = usr;
+    }
+
+    // O próprio pedido de acesso é registrado, como exige o art. 37
+    registrarAuditoria(req, {
+      action: 'exportar_lgpd', entity: tipo, entityId: id,
+      entityName: base.titular.razaoSocial || base.titular.nome,
+      changes: { 'Solicitação': { de: 'Direito de acesso (art. 18)', para: 'Dados exportados' } }
+    });
+
+    send(res, base);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /lgpd/retencao — clientes cujos dados passaram do prazo de guarda
+router.get('/lgpd/retencao', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await q(`
+      SELECT c.id, c.name, c.contact_name, c.email, c.phone, c.date,
+             MAX(COALESCE(p.date_end, p.date_start)) AS ultimo_projeto,
+             COUNT(p.id) AS total_projetos
+      FROM clients c
+      LEFT JOIN projects p ON p.client_id = c.id
+      GROUP BY c.id, c.name, c.contact_name, c.email, c.phone, c.date
+    `);
+
+    const limite = new Date();
+    limite.setFullYear(limite.getFullYear() - RETENCAO_ANOS);
+    const limiteStr = limite.toISOString().slice(0, 10);
+
+    const vencidos = rows.filter(r => {
+      const ref = r.ultimo_projeto || r.date;
+      return ref && ref < limiteStr;
+    }).map(r => ({
+      id: r.id, nome: r.name,
+      contato: r.contact_name || '',
+      temDadosPessoais: !!(r.contact_name || r.email || r.phone),
+      ultimaAtividade: r.ultimo_projeto || r.date,
+      totalProjetos: parseInt(r.total_projetos)
+    })).sort((a,b) => (a.ultimaAtividade||'').localeCompare(b.ultimaAtividade||''));
+
+    send(res, { prazoAnos: RETENCAO_ANOS, limite: limiteStr, total: vencidos.length, clientes: vencidos });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /lgpd/anonimizar/:id — remove os dados pessoais mantendo o histórico do projeto
+router.post('/lgpd/anonimizar/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rows: [c] } = await q('SELECT name, contact_name FROM clients WHERE id=$1', [req.params.id]);
+    if (!c) return notFound(res, 'Cliente');
+
+    await q(
+      `UPDATE clients SET contact_name='', contact_role='', phone='', email='',
+                          notes = CASE WHEN notes <> '' THEN '[dados removidos por retenção LGPD]' ELSE '' END
+       WHERE id=$1`, [req.params.id]);
+
+    registrarAuditoria(req, {
+      action: 'anonimizar_lgpd', entity: 'cliente', entityId: req.params.id, entityName: c.name,
+      changes: { 'Dados pessoais do contato': { de: c.contact_name || '(preenchido)', para: '(removidos por retenção)' } }
+    });
+
+    send(res, { ok: true, cliente: c.name });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
