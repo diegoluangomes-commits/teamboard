@@ -7,6 +7,58 @@ const GROUPS = [
   { name: 'Administrativo',     color: '#534AB7', bg: '#EEEDFE', text: '#3C3489' }
 ];
 
+// ── Tema (modo escuro / claro) ─────────────────────────────
+function toggleTheme(){
+  const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+  const novoTema=isDark?'light':'dark';
+  document.documentElement.setAttribute('data-theme', novoTema);
+  localStorage.setItem('ts-theme', novoTema);
+  const btn=$('btn-theme');
+  if(btn) btn.textContent=novoTema==='dark'?'☀️':'🌙';
+}
+
+function applyTheme(){
+  const saved=localStorage.getItem('ts-theme');
+  const prefer=window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light';
+  const tema=saved||prefer;
+  document.documentElement.setAttribute('data-theme', tema);
+  const btn=$('btn-theme');
+  if(btn) btn.textContent=tema==='dark'?'☀️':'🌙';
+}
+
+// ── Barra de loading global ───────────────────────────────
+const loadingBar=()=>document.getElementById('loading-bar');
+let _loadCount=0;
+function showLoading(){
+  _loadCount++;
+  const b=loadingBar();if(!b)return;
+  b.classList.remove('done'); b.classList.add('active');
+}
+function hideLoading(){
+  _loadCount=Math.max(0,_loadCount-1);
+  if(_loadCount>0)return;
+  const b=loadingBar();if(!b)return;
+  b.classList.add('done');
+  setTimeout(()=>b.classList.remove('active','done'),500);
+}
+
+// ── Sidebar mobile ────────────────────────────────────────
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  sb?.classList.toggle('open');
+}
+function closeSidebarMobile(){
+  if(window.innerWidth<=768) document.getElementById('sidebar')?.classList.remove('open');
+}
+// Exibe o toggle de sidebar no mobile
+function applyMobileLayout(){
+  const toggle=$('sidebar-toggle');
+  if(!toggle)return;
+  toggle.style.display=window.innerWidth<=768?'flex':'none';
+}
+
+// Override da função api() para integrar o loading
+
 const SM = {
   done:     { l: 'Concluído',         c: 's-done'     },
   progress: { l: 'Em andamento',      c: 's-progress'  },
@@ -74,6 +126,8 @@ function ownerAvatar(o) {
 }
 
 async function api(method, path, body) {
+  showLoading();
+  try {
   const res = await fetch('/api' + path, {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -121,6 +175,7 @@ async function api(method, path, body) {
     throw err;
   }
   return data;
+  } finally { hideLoading(); }
 }
 
 // Exibe erro de exclusão bloqueada
@@ -2692,6 +2747,7 @@ function switchAgTab(tab){ renderAgendasOwner(); }
 
 function goPage(p){
   closeModal();
+  closeSidebarMobile();
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('act'));
   document.getElementById('page-'+p)?.classList.add('active');
@@ -3593,6 +3649,9 @@ function showToast(msg,type='success'){
 
 // ── Init ───────────────────────────────────────────────────
 (async()=>{
+  applyTheme();
+  applyMobileLayout();
+  window.addEventListener('resize', applyMobileLayout);
   const loggedIn = await checkLocalAuth();
   if(loggedIn){
     showApp();

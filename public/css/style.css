@@ -200,3 +200,89 @@ td { padding: 6px 9px; vertical-align: middle; overflow: hidden; text-overflow: 
 /* Perfil Responsável — oculta exclusões e criação de projetos */
 body.perfil-responsavel .btn-red    { display: none !important; }
 body.perfil-responsavel .admin-only { display: none !important; }
+
+/* ── Modo escuro ─────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:       #1a1a1a;
+  --surface:  #242424;
+  --surface2: #2d2d2d;
+  --border:   rgba(255,255,255,0.10);
+  --border2:  rgba(255,255,255,0.20);
+  --text:     #e8e8e5;
+  --text2:    #a0a09a;
+  --text3:    #6e6e66;
+  --blue-bg:  #0d2e4a;
+  --green-bg: #1a2e0a;
+  --red-bg:   #2e0a0a;
+  --amber-bg: #2e1f0a;
+  --purple-bg:#1a183a;
+}
+[data-theme="dark"] .btn          { border-color: var(--border2); }
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea      { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+[data-theme="dark"] .proj-card    { background: var(--surface); }
+[data-theme="dark"] .modal-box    { background: var(--surface); }
+[data-theme="dark"] table thead   { background: var(--surface2); }
+
+/* Toggle de tema */
+.theme-toggle { cursor:pointer; font-size:16px; padding:4px 8px; border-radius:var(--r-md);
+                background:transparent; border:none; line-height:1; color:var(--text2); }
+.theme-toggle:hover { background:var(--surface2); }
+
+/* ── Barra de loading global ─────────────────────────────── */
+#loading-bar {
+  position: fixed; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--blue); z-index: 9999;
+  transform: scaleX(0); transform-origin: left;
+  transition: transform .2s ease, opacity .3s ease;
+  opacity: 0;
+}
+#loading-bar.active { opacity: 1; transform: scaleX(0.85); }
+#loading-bar.done   { transform: scaleX(1); opacity: 0; transition: transform .1s, opacity .4s .1s; }
+
+/* ── Responsivo — mobile ─────────────────────────────────── */
+@media (max-width: 768px) {
+  .layout { flex-direction: column; }
+
+  .sidebar {
+    width: 100%; height: auto; max-height: 0; overflow: hidden;
+    position: relative; top: 0;
+    border-right: none; border-bottom: 0.5px solid var(--border);
+    transition: max-height .25s ease;
+  }
+  .sidebar.open { max-height: 80vh; overflow-y: auto; }
+  #sidebar-toggle {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 14px; cursor: pointer; font-size:12px; color:var(--text2);
+  }
+
+  .content { padding: 0; }
+  .page { padding: 10px; }
+  .ph { flex-wrap: wrap; gap: 6px; }
+  .ph .ctrls { flex-wrap: wrap; gap: 4px; width: 100%; }
+  .ph .ctrls input, .ph .ctrls select { min-width: 120px; flex: 1; }
+
+  .f2 { flex-direction: column; }
+
+  /* Tabelas ficam com scroll horizontal no mobile */
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 600px; }
+
+  /* Calendário em coluna única */
+  .cal-grid { grid-template-columns: 1fr !important; }
+
+  /* Grid de projetos */
+  .proj-grid { grid-template-columns: 1fr !important; }
+
+  /* Dashboard cards */
+  .sbar { flex-direction: column; gap: 8px; }
+  .sbar .sc { min-width: 100%; }
+
+  /* Modal ocupa a tela toda */
+  .modal-box { width: 98vw; max-height: 90vh; overflow-y: auto; border-radius: var(--r-md); }
+
+  /* Topbar compacta */
+  .topbar { padding: 6px 10px; gap: 6px; flex-wrap: wrap; }
+  .topbar .right-actions { gap: 4px; }
+}

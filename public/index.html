@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/css/style.css"/>
 </head>
 <body>
+<div id="loading-bar"></div>
 
 <div class="topbar">
   <div class="logo" onclick="goPage('projects')" style="display:flex;align-items:center;gap:8px">
@@ -30,6 +31,7 @@
       <div id="notif-dot" style="position:absolute;top:-1px;right:-2px;width:7px;height:7px;border-radius:50%;background:#E24B4A;border:1.5px solid white;display:none"></div>
     </div>
     <button class="btn btn-blue" onclick="openTaskModal()">+ Nova tarefa</button>
+    <button class="theme-toggle" onclick="toggleTheme()" id="btn-theme" title="Alternar modo escuro">🌙</button>
     <div id="top-user" class="top-user hidden">
       <img id="top-avatar" src="" alt="" class="top-avatar"/>
       <span id="top-name"></span>
@@ -43,7 +45,11 @@
 </div>
 
 <div class="layout">
-  <nav class="sidebar">
+  <nav class="sidebar" id="sidebar">
+    <div id="sidebar-toggle" onclick="toggleSidebar()" style="display:none">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect y="2" width="16" height="2" rx="1"/><rect y="7" width="16" height="2" rx="1"/><rect y="12" width="16" height="2" rx="1"/></svg>
+      Menu
+    </div>
     <div class="ns">Principal</div>
     <div class="ni act" id="ni-projects" onclick="goPage('projects')">
       <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor"><rect x="1" y="1" width="4.5" height="4.5" rx="1"/><rect x="7.5" y="1" width="4.5" height="4.5" rx="1"/><rect x="1" y="7.5" width="4.5" height="4.5" rx="1"/><rect x="7.5" y="7.5" width="4.5" height="4.5" rx="1"/></svg>
