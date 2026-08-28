@@ -15,23 +15,21 @@ const isProd = process.env.NODE_ENV === 'production';
 if (isProd) app.set('trust proxy', 1);
 
 // ── Segurança HTTP ─────────────────────────────────────────
-// Protege contra clickjacking, sniffing de MIME e vazamento de referrer
+// Protege contra clickjacking, sniffing de MIME e vazamento de referrer.
+// CSP fica desativada: o app usa handlers inline (onclick) e SVG embutido,
+// que exigiriam uma refatoração grande do frontend para funcionar com ela.
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc:  ["'self'"],
-      scriptSrc:   ["'self'", "'unsafe-inline'", 'https://accounts.google.com'],
-      styleSrc:    ["'self'", "'unsafe-inline'"],
-      imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://accounts.google.com', 'https://www.googleapis.com'],
-      frameSrc:    ["'self'", 'https://accounts.google.com'],
-      objectSrc:   ["'none'"],
-      frameAncestors: ["'none'"]   // impede que o app seja embutido em iframe
-    }
-  },
-  crossOriginEmbedderPolicy: false, // evita bloquear recursos do Google
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
   referrerPolicy: { policy: 'same-origin' }
 }));
+
+// Impede que o app seja embutido em iframe de outro site (anti-clickjacking)
+app.use((req, res, next) => {
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  next();
+});
 
 // ── Middlewares ────────────────────────────────────────────
 app.use(express.json({ limit: '2mb' }));
