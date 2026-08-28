@@ -3,6 +3,7 @@ const express        = require('express');
 const session        = require('express-session');
 const pgSession      = require('connect-pg-simple')(session);
 const rateLimit      = require('express-rate-limit');
+const helmet         = require('helmet');
 const path           = require('path');
 const { initDB, pool } = require('./db');
 
@@ -12,6 +13,25 @@ const isProd = process.env.NODE_ENV === 'production';
 
 // Render/Heroku ficam atrás de proxy — necessário para cookie secure funcionar
 if (isProd) app.set('trust proxy', 1);
+
+// ── Segurança HTTP ─────────────────────────────────────────
+// Protege contra clickjacking, sniffing de MIME e vazamento de referrer
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'", 'https://accounts.google.com'],
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", 'data:', 'https:'],
+      connectSrc:  ["'self'", 'https://accounts.google.com', 'https://www.googleapis.com'],
+      frameSrc:    ["'self'", 'https://accounts.google.com'],
+      objectSrc:   ["'none'"],
+      frameAncestors: ["'none'"]   // impede que o app seja embutido em iframe
+    }
+  },
+  crossOriginEmbedderPolicy: false, // evita bloquear recursos do Google
+  referrerPolicy: { policy: 'same-origin' }
+}));
 
 // ── Middlewares ────────────────────────────────────────────
 app.use(express.json({ limit: '2mb' }));

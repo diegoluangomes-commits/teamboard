@@ -37,6 +37,42 @@ router.use((req, res, next) => {
   return requireAuth(req, res, next);
 });
 
+// ── Validação de entrada ───────────────────────────────────
+// Limites de tamanho por tipo de campo
+const LIM = { nome:200, email:150, telefone:30, texto:500, obs:5000, url:500 };
+
+const txt = (v, max) => {
+  if (v === null || v === undefined) return '';
+  return String(v).trim().slice(0, max);
+};
+
+const emailValido = e => !e || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+const dataValida  = d => !d || /^\d{4}-\d{2}-\d{2}$/.test(d);
+
+// Verifica os campos comuns e devolve a primeira mensagem de erro, ou null
+function validar(campos) {
+  for (const c of campos) {
+    const { valor, rotulo, obrigatorio, max, tipo } = c;
+    const v = valor === null || valor === undefined ? '' : String(valor).trim();
+    if (obrigatorio && !v) return `${rotulo} é obrigatório.`;
+    if (max && v.length > max) return `${rotulo} deve ter no máximo ${max} caracteres.`;
+    if (tipo === 'email' && v && !emailValido(v)) return `${rotulo} não é um e-mail válido.`;
+    if (tipo === 'data'  && v && !dataValida(v))  return `${rotulo} deve estar no formato AAAA-MM-DD.`;
+    if (tipo === 'num'   && v && isNaN(Number(v))) return `${rotulo} deve ser um número.`;
+  }
+  return null;
+}
+
+const erro400 = (res, msg) => res.status(400).json({ error: 'DADOS_INVALIDOS', message: msg });
+
+// Regra de senha: mínimo 8 caracteres, com letra e número
+function senhaFraca(senha) {
+  if (!senha || senha.length < 8) return 'A senha deve ter pelo menos 8 caracteres.';
+  if (!/[A-Za-z]/.test(senha))    return 'A senha deve conter ao menos uma letra.';
+  if (!/[0-9]/.test(senha))       return 'A senha deve conter ao menos um número.';
+  return null;
+}
+
 // ── Auditoria ──────────────────────────────────────────────
 // Mapeia rota → nome legível da entidade
 const ENTIDADES = {
@@ -427,7 +463,8 @@ router.get('/users', async (req, res) => {
 router.post('/users', requireAdmin, async (req, res) => {
   try {
     const { name, email, password, perfil, ownerId, active } = req.body;
-    if (!password || password.length < 6) return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
+    const eSenha = senhaFraca(password);
+    if (eSenha) return erro400(res, eSenha);
     const id = uuidv4();
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await q(
@@ -443,7 +480,8 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
     const { name, email, password, perfil, ownerId, active } = req.body;
     let sql, params;
     if (password) {
-      if (password.length < 6) return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
+      const eSenha = senhaFraca(password);
+      if (eSenha) return erro400(res, eSenha);
       const hash = await bcrypt.hash(password, 10);
       sql = 'UPDATE users SET name=$1,email=$2,password=$3,perfil=$4,owner_id=$5,active=$6 WHERE id=$7 RETURNING *';
       params = [name, email, hash, perfil, ownerId||null, active!==false, req.params.id];
@@ -468,7 +506,8 @@ router.post('/change-password', async (req, res) => {
       ? await bcrypt.compare(oldPassword, user.password)
       : user.password === oldPassword;
     if (!atualOk) return res.status(400).json({ error: 'Senha atual incorreta' });
-    if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres' });
+    const eNova = senhaFraca(newPassword);
+    if (eNova) return erro400(res, eNova);
     const novoHash = await bcrypt.hash(newPassword, 10);
     await q('UPDATE users SET password=$1 WHERE id=$2', [novoHash, req.session.userId]);
     send(res, { ok: true });
@@ -490,6 +529,14 @@ router.get('/projects', async (req, res) => {
 
 router.post('/projects', requireAdmin, async (req, res) => {
   const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas, status, tipo } = req.body;
+  const e = validar([
+    { valor:name,       rotulo:'Nome do projeto', obrigatorio:true, max:LIM.nome },
+    { valor:desc,       rotulo:'Descrição', max:LIM.obs },
+    { valor:dateStart,  rotulo:'Data início', tipo:'data' },
+    { valor:dateEnd,    rotulo:'Data fim', tipo:'data' },
+    { valor:qtdAgendas, rotulo:'Qtd. agendas', tipo:'num' }
+  ]);
+  if (e) return erro400(res, e);
   const id = uuidv4();
   const { rows } = await q(
     'INSERT INTO projects (id,name,color,descr,client_id,product_id,seller_id,owner_id,date_start,date_end,qtd_agendas,status,tipo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *',
@@ -500,6 +547,15 @@ router.post('/projects', requireAdmin, async (req, res) => {
 
 router.put('/projects/:id', async (req, res) => {
   const { name, color, desc, clientId, productId, sellerId, ownerId, dateStart, dateEnd, qtdAgendas, status, cancelReason, tipo } = req.body;
+  const eProj = validar([
+    { valor:name,         rotulo:'Nome do projeto', obrigatorio:true, max:LIM.nome },
+    { valor:desc,         rotulo:'Descrição', max:LIM.obs },
+    { valor:dateStart,    rotulo:'Data início', tipo:'data' },
+    { valor:dateEnd,      rotulo:'Data fim', tipo:'data' },
+    { valor:qtdAgendas,   rotulo:'Qtd. agendas', tipo:'num' },
+    { valor:cancelReason, rotulo:'Motivo do cancelamento', max:LIM.obs }
+  ]);
+  if (eProj) return erro400(res, eProj);
   // Responsável pode editar, mas não pode trocar o cliente nem o responsável do projeto
   let finalClientId = clientId || null;
   let finalOwnerId  = ownerId  || null;
@@ -570,6 +626,14 @@ router.get('/tasks', async (req, res) => {
 
 router.post('/tasks', async (req, res) => {
   const { name, projId, group, status, ownerId, priority, date, dateStart, dateEnd, turno, desc, meet } = req.body;
+  const e = validar([
+    { valor:name,      rotulo:'Nome da tarefa', obrigatorio:true, max:LIM.nome },
+    { valor:desc,      rotulo:'Descrição', max:LIM.obs },
+    { valor:date,      rotulo:'Prazo', tipo:'data' },
+    { valor:dateStart, rotulo:'Data início', tipo:'data' },
+    { valor:dateEnd,   rotulo:'Data fim', tipo:'data' }
+  ]);
+  if (e) return erro400(res, e);
   const id = uuidv4();
   const { rows } = await q(
     'INSERT INTO tasks (id,name,proj_id,grp,status,owner_id,priority,date,date_start,date_end,turno,descr,comments,meet) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *',
@@ -636,6 +700,16 @@ router.get('/clients', async (req, res) => {
 
 router.post('/clients', async (req, res) => {
   const { name, classification, productId, date, sellerId, notes, contactName, contactRole, phone, email } = req.body;
+  const e = validar([
+    { valor:name,        rotulo:'Nome',     obrigatorio:true, max:LIM.nome },
+    { valor:email,       rotulo:'E-mail',   max:LIM.email, tipo:'email' },
+    { valor:phone,       rotulo:'Telefone', max:LIM.telefone },
+    { valor:contactName, rotulo:'Contato',  max:LIM.nome },
+    { valor:contactRole, rotulo:'Cargo',    max:LIM.nome },
+    { valor:date,        rotulo:'Data de entrada', tipo:'data' },
+    { valor:notes,       rotulo:'Observações', max:LIM.obs }
+  ]);
+  if (e) return erro400(res, e);
   const id = uuidv4();
   const { rows } = await q(
     'INSERT INTO clients (id,name,classification,product_id,date,seller_id,notes,contact_name,contact_role,phone,email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
@@ -646,6 +720,16 @@ router.post('/clients', async (req, res) => {
 
 router.put('/clients/:id', async (req, res) => {
   const { name, classification, productId, date, sellerId, notes, contactName, contactRole, phone, email } = req.body;
+  const e = validar([
+    { valor:name,        rotulo:'Nome',     obrigatorio:true, max:LIM.nome },
+    { valor:email,       rotulo:'E-mail',   max:LIM.email, tipo:'email' },
+    { valor:phone,       rotulo:'Telefone', max:LIM.telefone },
+    { valor:contactName, rotulo:'Contato',  max:LIM.nome },
+    { valor:contactRole, rotulo:'Cargo',    max:LIM.nome },
+    { valor:date,        rotulo:'Data de entrada', tipo:'data' },
+    { valor:notes,       rotulo:'Observações', max:LIM.obs }
+  ]);
+  if (e) return erro400(res, e);
   const { rows } = await q(
     'UPDATE clients SET name=$1,classification=$2,product_id=$3,date=$4,seller_id=$5,notes=$6,contact_name=$7,contact_role=$8,phone=$9,email=$10 WHERE id=$11 RETURNING *',
     [name, classification||'Ouro', productId||null, date||'', sellerId||null, notes||'', contactName||'', contactRole||'', phone||'', email||'', req.params.id]
@@ -720,6 +804,11 @@ router.get('/owners', async (req, res) => {
 
 router.post('/owners', async (req, res) => {
   const { name, email, color, initials, active } = req.body;
+  const e = validar([
+    { valor:name,  rotulo:'Nome', obrigatorio:true, max:LIM.nome },
+    { valor:email, rotulo:'E-mail', max:LIM.email, tipo:'email' }
+  ]);
+  if (e) return erro400(res, e);
   const id = uuidv4();
   const { rows } = await q(
     'INSERT INTO owners (id,name,email,color,initials,active) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
@@ -765,6 +854,12 @@ router.get('/sellers', async (req, res) => {
 
 router.post('/sellers', async (req, res) => {
   const { name, email, phone, active } = req.body;
+  const e = validar([
+    { valor:name,  rotulo:'Nome', obrigatorio:true, max:LIM.nome },
+    { valor:email, rotulo:'E-mail', max:LIM.email, tipo:'email' },
+    { valor:phone, rotulo:'Telefone', max:LIM.telefone }
+  ]);
+  if (e) return erro400(res, e);
   const id = uuidv4();
   const { rows } = await q(
     'INSERT INTO sellers (id,name,email,phone,active) VALUES ($1,$2,$3,$4,$5) RETURNING *',

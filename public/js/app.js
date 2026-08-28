@@ -100,6 +100,13 @@ async function api(method, path, body) {
     showToast('⏳ ' + err.message, 'error');
     throw err;
   }
+  // 400 = dados inválidos — mostra a mensagem ao usuário
+  if (res.status === 400 && data.error === 'DADOS_INVALIDOS') {
+    showToast('⚠️ ' + (data.message || 'Dados inválidos'), 'error');
+    const err = new Error(data.message || 'Dados inválidos');
+    err.validacao = true;
+    throw err;
+  }
   // 409 = conflito de integridade (registro em uso)
   if (res.status === 409) {
     const err = new Error(data.message || 'Registro em uso');
@@ -1323,7 +1330,9 @@ async function saveClient(){
   const body={name,classification:$('c-class').value,productId:$('c-product').value||null,date:$('c-date').value,sellerId:$('c-seller').value||null,notes:$('c-notes').value,
     contactName:$('c-contact-name')?.value||'',contactRole:$('c-contact-role')?.value||'',
     phone:$('c-phone')?.value||'',email:$('c-email')?.value||''};
-  if(editingClient){await api('PUT','/clients/'+editingClient,body);}else{await api('POST','/clients',body);}
+  try{
+    if(editingClient){await api('PUT','/clients/'+editingClient,body);}else{await api('POST','/clients',body);}
+  }catch(e){ return; } // erro já exibido ao usuário; mantém o modal aberto
   clients=await api('GET','/clients');closeModal();renderClientsTable();updateSelects();
 }
 async function deleteClient(id){if(!canDelete())return;if(!confirm('Excluir cliente?'))return;
@@ -1406,7 +1415,9 @@ async function saveOwner(){
   const name=$('ow-name').value.trim();if(!name)return;
   const initials=$('ow-initials').value.trim().toUpperCase()||name.slice(0,2).toUpperCase();
   const body={name,initials,email:$('ow-email').value,color:$('ow-color').value,active:$('ow-active').value==='true'};
-  if(editingOwner){await api('PUT','/owners/'+editingOwner,body);}else{await api('POST','/owners',body);}
+  try{
+    if(editingOwner){await api('PUT','/owners/'+editingOwner,body);}else{await api('POST','/owners',body);}
+  }catch(e){ return; }
   owners=await api('GET','/owners');closeModal();renderOwnersTable();updateSelects();
 }
 async function deleteOwner(id){if(!canDelete())return;if(!confirm('Excluir responsável?'))return;
@@ -1443,7 +1454,9 @@ function editSeller(id){const s=sellers.find(x=>x.id===id);if(!s)return;editingS
 async function saveSeller(){
   const name=$('se-name').value.trim();if(!name)return;
   const body={name,email:$('se-email').value,phone:$('se-phone').value,active:$('se-active').value==='true'};
-  if(editingSeller){await api('PUT','/sellers/'+editingSeller,body);}else{await api('POST','/sellers',body);}
+  try{
+    if(editingSeller){await api('PUT','/sellers/'+editingSeller,body);}else{await api('POST','/sellers',body);}
+  }catch(e){ return; }
   sellers=await api('GET','/sellers');closeModal();renderSellersTable();updateSelects();
 }
 async function deleteSeller(id){if(!canDelete())return;if(!confirm('Excluir vendedor?'))return;
