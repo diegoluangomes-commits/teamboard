@@ -7,6 +7,31 @@ const GROUPS = [
   { name: 'Administrativo',     color: '#534AB7', bg: '#EEEDFE', text: '#3C3489' }
 ];
 
+// ── Timeout por inatividade ───────────────────────────────
+// Avisa 10 min antes de expirar e redireciona ao expirar
+const TIMEOUT_MS = 2 * 60 * 60 * 1000;    // 2h (igual ao servidor)
+const AVISO_MS   = 10 * 60 * 1000;         // avisa 10min antes
+let _timeoutAviso, _timeoutExpira;
+
+function resetarTimeout() {
+  clearTimeout(_timeoutAviso);
+  clearTimeout(_timeoutExpira);
+  _timeoutAviso = setTimeout(() => {
+    showToast('⏰ Sua sessão expira em 10 minutos. Salve o que estiver fazendo.', 'error');
+  }, TIMEOUT_MS - AVISO_MS);
+  _timeoutExpira = setTimeout(() => {
+    showToast('Sessão encerrada por inatividade.', 'error');
+    setTimeout(() => location.reload(), 1500);
+  }, TIMEOUT_MS);
+}
+
+function iniciarTimeoutInatividade() {
+  ['click','keydown','scroll','mousemove'].forEach(ev =>
+    document.addEventListener(ev, resetarTimeout, { passive: true })
+  );
+  resetarTimeout();
+}
+
 // ── Tema (modo escuro / claro) ─────────────────────────────
 function toggleTheme(){
   const isDark=document.documentElement.getAttribute('data-theme')==='dark';
@@ -134,15 +159,31 @@ function ownerAvatar(o) {
   return `<div class="av" style="background:${bg};color:#fff">${ini}</div>`;
 }
 
+// Lê o token CSRF do cookie e envia em toda escrita
+function getCsrfToken() {
+  const m = document.cookie.match(/(?:^|;\s*)csrf-token=([^;]+)/);
+  return m ? m[1] : '';
+}
+
 async function api(method, path, body) {
   showLoading();
   try {
+  const heads = { 'Content-Type': 'application/json' };
+  if (['POST','PUT','PATCH','DELETE'].includes(method)) {
+    heads['X-CSRF-Token'] = getCsrfToken();
+  }
   const res = await fetch('/api' + path, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: heads,
     body: body ? JSON.stringify(body) : undefined
   });
   const data = await res.json();
+  // 403 CSRF = token inválido → pede para recarregar
+  if (res.status === 403 && data.error === 'CSRF_INVALIDO') {
+    showToast('🔒 ' + (data.message || 'Erro de segurança. Recarregue a página.'), 'error');
+    setTimeout(() => location.reload(), 2000);
+    throw new Error(data.message);
+  }
   // 401 = sessão expirada ou inexistente → volta para o login
   if (res.status === 401 && !path.startsWith('/login')) {
     const ls = document.getElementById('login-screen');
@@ -3666,6 +3707,7 @@ function showToast(msg,type='success'){
     showApp();
     await checkAuth(); // Google
     await loadAll();
+    iniciarTimeoutInatividade();
   } else {
     // Esconde app e mostra login
     document.querySelector('.topbar').style.display='none';

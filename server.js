@@ -6,6 +6,7 @@ const rateLimit      = require('express-rate-limit');
 const helmet         = require('helmet');
 const path           = require('path');
 const { initDB, pool } = require('./db');
+const crypto         = require('crypto');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -71,6 +72,54 @@ app.use('/api', rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 }));
+
+// ── Timeout de inatividade (2h) ───────────────────────────
+const INATIVIDADE_MS = 2 * 60 * 60 * 1000; // 2 horas
+app.use((req, res, next) => {
+  if (!req.session?.userId) return next();
+  const agora = Date.now();
+  const ultima = req.session.ultimaAtividade || agora;
+  if (agora - ultima > INATIVIDADE_MS) {
+    return req.session.destroy(() => {
+      res.status(401).json({ error: 'SESSAO_EXPIRADA', message: 'Sessão expirada por inatividade.' });
+    });
+  }
+  req.session.ultimaAtividade = agora;
+  next();
+});
+
+// ── Token CSRF ─────────────────────────────────────────────
+// Gera um token por sessão e o envia em cookie legível pelo JS (não httpOnly)
+// O frontend o lê e envia em X-CSRF-Token; o servidor valida em toda escrita.
+app.use((req, res, next) => {
+  if (!req.session?.userId) return next();
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = crypto.randomBytes(24).toString('hex');
+  }
+  // Cookie legível pelo JS (sem httpOnly) para o frontend poder ler
+  res.cookie('csrf-token', req.session.csrfToken, {
+    sameSite: 'lax',
+    secure: isProd,
+    httpOnly: false
+  });
+  next();
+});
+
+// Valida CSRF em toda escrita (POST/PUT/PATCH/DELETE)
+// Exceções: login, logout e rotas externas com API key
+const CSRF_ISENTO = ['/api/login', '/api/logout-local'];
+app.use((req, res, next) => {
+  if (!['POST','PUT','PATCH','DELETE'].includes(req.method)) return next();
+  if (CSRF_ISENTO.includes(req.path)) return next();
+  if (req.path.startsWith('/api/ext/')) return next(); // usa API key
+  if (!req.session?.userId) return next();             // não autenticado
+  const tokenHeader = req.headers['x-csrf-token'];
+  const tokenSessao = req.session?.csrfToken;
+  if (!tokenHeader || tokenHeader !== tokenSessao) {
+    return res.status(403).json({ error: 'CSRF_INVALIDO', message: 'Token de segurança inválido. Recarregue a página.' });
+  }
+  next();
+});
 
 // ── Arquivos estáticos ─────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
