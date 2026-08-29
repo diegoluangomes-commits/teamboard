@@ -2907,13 +2907,14 @@ function renderComentarios(){
     if(!t.comments?.length)return;
     t.comments.forEach(c=>{
       if(filOwner&&t.ownerId!==filOwner)return;
-      const dt=new Date(c.createdAt||c.date||0);
-      if(corte&&dt<corte)return;
+      const dt=c.time?new Date(c.time.split('/').reverse().join('-').replace(' ','\n').replace('\n',' ')):null;
+      const dtMs=dt?.getTime()||0;
+      if(corte&&dtMs&&dt<corte)return;
       itens.push({tarefa:t.name,tarefaId:t.id,ownerId:t.ownerId,
-        autor:c.author||'—',texto:c.text||'',data:dt});
+        autor:c.author||'—',texto:c.text||'',data:dt,timeStr:c.time||''});
     });
   });
-  itens.sort((a,b)=>b.data-a.data);
+  itens.sort((a,b)=>(b.data||0)-(a.data||0));
 
   const total=$('cmt-total');
   if(total)total.textContent=itens.length+' comentário'+(itens.length!==1?'s':'');
@@ -2928,22 +2929,21 @@ function renderComentarios(){
 
   feed.innerHTML=itens.map(item=>{
     const owner=owners.find(o=>o.id===item.ownerId);
-    const quando=item.data.getTime()?
-      item.data.toLocaleDateString('pt-BR')+' '+item.data.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
-      :'—';
     return `<div class="cmt-card" style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r-lg);padding:13px 15px;margin-bottom:9px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
         ${ownerAvatar(owner)}
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:500">${esc(item.autor)}</div>
           <div style="font-size:10px;color:var(--text2);margin-top:1px">
-            em <strong>${esc(item.tarefa)}</strong> · ${quando}
+            em <strong>${esc(item.tarefa)}</strong>
           </div>
         </div>
-        <button class="btn btn-sm" onclick="openEditTask('${item.tarefaId}')" title="Abrir tarefa"
-          style="font-size:10px;padding:3px 8px;flex-shrink:0">Ver tarefa</button>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+          ${item.timeStr?`<span style="font-size:11px;color:var(--text);font-weight:500;background:var(--surface2);border:0.5px solid var(--border);border-radius:6px;padding:2px 7px">📅 ${esc(item.timeStr)}</span>`:''}
+          <button class="btn btn-sm" onclick="openEditTask('${item.tarefaId}')" style="font-size:10px;padding:2px 8px">Ver tarefa</button>
+        </div>
       </div>
-      <div style="font-size:12px;line-height:1.55;color:var(--text);padding-left:32px;white-space:pre-wrap">${esc(item.texto)}</div>
+      <div style="font-size:12px;line-height:1.55;color:var(--text);padding-left:32px;white-space:pre-wrap;border-left:2px solid var(--border);margin-left:32px;padding-left:10px">${esc(item.texto)}</div>
     </div>`;
   }).join('');
 }
