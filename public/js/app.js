@@ -3271,6 +3271,13 @@ function initDashboard(){
     ownerSel.innerHTML='<option value="">Todos responsáveis</option>'+
       owners.filter(o=>o.active!==false).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
   }
+  // Seleciona o mês atual no filtro
+  const mesSel=$('dash-mes');
+  if(mesSel && !mesSel.value){
+    const mesAtual=String(new Date().getMonth()+1).padStart(2,'0');
+    mesSel.value=mesAtual;
+  }
+
   const dlp=$('dl-dash-projs');
   if(dlp && !dlp.innerHTML){
     dlp.innerHTML=projects.slice()
@@ -3534,7 +3541,7 @@ async function renderDashboard(d){
   let secaoMetas='';
   try{
     const ano=$('dash-ano')?.value||new Date().getFullYear();
-    const mes=String(new Date().getMonth()+1).padStart(2,'0');
+    const mes=$('dash-mes')?.value||String(new Date().getMonth()+1).padStart(2,'0');
     const pm=await api('GET',`/metas/progresso?ano=${ano}&mes=${mes}`).catch(()=>null);
     if(pm?.meta&&pm.progresso?.length){
       const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
