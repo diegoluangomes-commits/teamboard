@@ -295,3 +295,39 @@ body.perfil-responsavel .admin-only { display: none !important; }
   .layout { flex-direction: column; }
   .content { width: 100%; }
 }
+
+/* ── Impressão / PDF ─────────────────────────────────────── */
+@media print {
+  /* Oculta tudo exceto o conteúdo do dashboard */
+  .topbar, .sidebar, .ph, #loading-bar { display: none !important; }
+  .layout { display: block !important; }
+  .content { padding: 0 !important; }
+  .page { display: none !important; padding: 0 !important; }
+  #page-dashboard { display: block !important; }
+
+  /* Remove bordas e sombras para impressão limpa */
+  .card-table, .sc, .sbar { box-shadow: none !important; border: 0.5px solid #ddd !important; }
+  body { background: #fff !important; color: #111 !important; }
+  table thead { background: #f5f5f5 !important; }
+  .btn { display: none !important; }
+  .pill { border: 0.5px solid #ccc !important; }
+
+  /* Cabeçalho do PDF */
+  #pdf-header { display: block !important; }
+
+  /* Quebra de página antes da tabela se necessário */
+  .card-table { break-inside: avoid; page-break-inside: avoid; }
+
+  @page {
+    size: A4 landscape;
+    margin: 15mm 10mm;
+  }
+}
+
+/* Cabeçalho visível só no PDF */
+#pdf-header {
+  display: none;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid #185FA5;
+}

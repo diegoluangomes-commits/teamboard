@@ -2980,6 +2980,54 @@ async function anonimizarCliente(id,nome){
   }catch(e){ showToast('Erro: '+e.message,'error'); }
 }
 
+// ── Exportar Dashboard em PDF ─────────────────────────────
+function exportarDashboardPDF(){
+  const box=$('dash-content');
+  if(!box||!box.innerHTML.trim()){
+    showToast('Carregue o dashboard antes de exportar','error'); return;
+  }
+
+  // Cria cabeçalho dinâmico com filtros aplicados
+  let filtros=[];
+  const ano=$('dash-ano')?.value; if(ano)filtros.push('Ano: '+ano);
+  const ownerTxt=$('dash-owner');
+  if(ownerTxt?.value){
+    const nome=ownerTxt.options[ownerTxt.selectedIndex]?.text;
+    if(nome&&nome!=='Todos responsáveis')filtros.push('Responsável: '+nome);
+  }
+  const statusTxt=$('dash-status');
+  if(statusTxt?.value){
+    const st=statusTxt.options[statusTxt.selectedIndex]?.text;
+    if(st&&st!=='Todas as situações')filtros.push('Situação: '+st);
+  }
+  const projTxt=$('dash-proj-txt')?.value;
+  if(projTxt)filtros.push('Projeto: '+projTxt);
+
+  const data=new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  // Insere (ou atualiza) o cabeçalho do PDF
+  let hdr=$('pdf-header');
+  if(!hdr){
+    hdr=document.createElement('div');
+    hdr.id='pdf-header';
+    box.prepend(hdr);
+  }
+  hdr.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-end">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#185FA5">TeamSolidez — Dashboard</div>
+        <div style="font-size:11px;color:#666;margin-top:3px">Solidez Soluções Empresariais</div>
+      </div>
+      <div style="text-align:right;font-size:10px;color:#888">
+        <div>Emitido em ${data}</div>
+        ${filtros.length?'<div>Filtros: '+filtros.join(' · ')+'</div>':'<div>Todos os projetos</div>'}
+      </div>
+    </div>`;
+
+  // Aguarda renderização e abre impressão
+  setTimeout(()=>{ window.print(); }, 150);
+}
+
 // ── Auditoria ──────────────────────────────────────────────
 const AUD_ACOES = {
   criar:        { l:'Criou',          c:'s-done',     ic:'＋' },
