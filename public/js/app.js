@@ -50,6 +50,15 @@ function toggleSidebar(){
 function closeSidebarMobile(){
   if(window.innerWidth<=768) document.getElementById('sidebar')?.classList.remove('open');
 }
+// Fecha a sidebar ao clicar fora dela no mobile
+document.addEventListener('click', e => {
+  if(window.innerWidth>768)return;
+  const sb=document.getElementById('sidebar');
+  const toggle=$('sidebar-toggle');
+  if(sb?.classList.contains('open') && !sb.contains(e.target) && e.target!==toggle && !toggle?.contains(e.target)){
+    sb.classList.remove('open');
+  }
+});
 // Exibe o toggle de sidebar no mobile
 function applyMobileLayout(){
   const toggle=$('sidebar-toggle');

@@ -24,6 +24,9 @@
     <span id="breadcrumb" class="breadcrumb">/ Projetos</span>
   </div>
   <div class="top-right">
+    <button id="sidebar-toggle" onclick="toggleSidebar()" style="display:none;background:transparent;border:none;cursor:pointer;padding:6px;color:var(--text2)" title="Menu">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><rect y="2" width="18" height="2" rx="1"/><rect y="8" width="18" height="2" rx="1"/><rect y="14" width="18" height="2" rx="1"/></svg>
+    </button>
     <div id="local-user-info" style="display:flex;align-items:center;gap:7px"></div>
     <div style="width:0.5px;height:18px;background:var(--border2);margin:0 2px"></div>
     <div style="position:relative;cursor:pointer" onclick="goPage('notif')">
@@ -46,10 +49,6 @@
 
 <div class="layout">
   <nav class="sidebar" id="sidebar">
-    <div id="sidebar-toggle" onclick="toggleSidebar()" style="display:none">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect y="2" width="16" height="2" rx="1"/><rect y="7" width="16" height="2" rx="1"/><rect y="12" width="16" height="2" rx="1"/></svg>
-      Menu
-    </div>
     <div class="ns">Principal</div>
     <div class="ni act" id="ni-projects" onclick="goPage('projects')">
       <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor"><rect x="1" y="1" width="4.5" height="4.5" rx="1"/><rect x="7.5" y="1" width="4.5" height="4.5" rx="1"/><rect x="1" y="7.5" width="4.5" height="4.5" rx="1"/><rect x="7.5" y="7.5" width="4.5" height="4.5" rx="1"/></svg>
