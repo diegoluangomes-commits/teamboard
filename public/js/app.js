@@ -2847,6 +2847,7 @@ function goPage(p){
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
+  if(p==='metas'){ loadMetas(); }
   if(p==='privacidade'){ loadPrivacidade(); }
   if(p==='audit'){
     initAudit();
@@ -2865,6 +2866,122 @@ function switchView(v,el){
   document.querySelectorAll('.vt').forEach(t=>t.classList.remove('act'));el.classList.add('act');
   $('view-tbl').style.display=v==='tbl'?'block':'none';
   $('view-kan').style.display=v==='kan'?'block':'none';
+}
+
+// ── Metas ──────────────────────────────────────────────────
+let metasData = [];
+
+async function loadMetas(){
+  const box=$('metas-content');if(!box)return;
+  box.innerHTML='<div style="padding:30px;text-align:center;color:var(--text3)">Carregando…</div>';
+  try{
+    metasData=await api('GET','/metas');
+    renderMetas();
+  }catch(e){
+    box.innerHTML=`<div style="padding:30px;text-align:center;color:var(--red)">Erro: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderMetas(){
+  const box=$('metas-content');if(!box)return;
+  if(!metasData.length){
+    box.innerHTML=`<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">
+      Nenhuma meta cadastrada.<br><br>
+      <button class="btn btn-blue admin-only" onclick="abrirModalMeta(null)">+ Criar primeira meta</button>
+    </div>`;
+    return;
+  }
+  box.innerHTML=metasData.map(m=>`
+    <div class="card-table" style="margin-bottom:14px">
+      <div style="padding:12px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:14px;font-weight:600">${m.ano}</div>
+          <div style="font-size:11px;color:var(--text2)">Meta mensal: <strong>${m.metaMensal}</strong> agendas realizadas${m.obs?` · ${esc(m.obs)}`:''}</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:6px" class="admin-only">
+          <button class="btn btn-sm" onclick="abrirModalMeta('${m.id}')">Editar</button>
+          <button class="btn btn-red btn-sm" onclick="deletarMeta('${m.id}',${m.ano})">×</button>
+        </div>
+      </div>
+      <div style="padding:12px 16px">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:8px">Responsáveis monitorados (${m.responsaveis.length}):</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${m.responsaveis.map(r=>`
+            <div style="display:flex;align-items:center;gap:5px;background:var(--surface2);border-radius:20px;padding:3px 10px 3px 4px">
+              ${ownerAvatar(r)}
+              <span style="font-size:11px">${esc(r.nome)}</span>
+            </div>`).join('')}
+          ${!m.responsaveis.length?'<span style="font-size:11px;color:var(--text3)">Nenhum responsável vinculado</span>':''}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function abrirModalMeta(id){
+  const m=id?metasData.find(x=>x.id===id):null;
+  const anoAtual=new Date().getFullYear();
+  const responsaveisCheck=owners.filter(o=>o.active!==false).map(o=>`
+    <label style="display:flex;align-items:center;gap:7px;padding:5px 0;cursor:pointer;font-size:12px">
+      <input type="checkbox" value="${o.id}" ${m?.responsaveis.some(r=>r.id===o.id)?'checked':''} style="width:14px;height:14px">
+      ${ownerAvatar(o)} ${esc(o.name)}
+    </label>`).join('');
+  showModal(`<div class="modal-inner">
+    <h3>${m?'Editar meta '+m.ano:'Nova meta anual'}</h3>
+    <div class="f2">
+      <div class="fr"><label>Ano</label>
+        <input type="number" id="meta-ano" value="${m?.ano||anoAtual}" min="2024" max="2030" ${m?'readonly style="opacity:.6"':''}/>
+      </div>
+      <div class="fr"><label>Meta mensal (agendas)</label>
+        <input type="number" id="meta-mensal" value="${m?.metaMensal||30}" min="1" max="999"/>
+      </div>
+    </div>
+    <div class="fr"><label>Observação (opcional)</label>
+      <input id="meta-obs" value="${esc(m?.obs||'')}" placeholder="Ex: válida para toda a equipe"/>
+    </div>
+    <div class="fr" style="flex-direction:column;align-items:flex-start">
+      <label style="margin-bottom:8px">Responsáveis monitorados</label>
+      <div style="max-height:220px;overflow-y:auto;width:100%;border:0.5px solid var(--border2);border-radius:var(--r-md);padding:8px 12px" id="meta-owners-list">
+        ${responsaveisCheck}
+      </div>
+      <div style="margin-top:5px;display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="selecionarTodosMeta(true)">Selecionar todos</button>
+        <button class="btn btn-sm" onclick="selecionarTodosMeta(false)">Desmarcar todos</button>
+      </div>
+    </div>
+    <div class="ma">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-blue" onclick="salvarMeta('${id||''}')">Salvar meta</button>
+    </div>
+  </div>`);
+}
+
+function selecionarTodosMeta(sel){
+  document.querySelectorAll('#meta-owners-list input[type=checkbox]').forEach(cb=>cb.checked=sel);
+}
+
+async function salvarMeta(id){
+  const ano=$('meta-ano')?.value;
+  const metaMensal=$('meta-mensal')?.value;
+  const obs=$('meta-obs')?.value||'';
+  const responsaveis=[...document.querySelectorAll('#meta-owners-list input:checked')].map(cb=>cb.value);
+  if(!responsaveis.length){showToast('Selecione ao menos um responsável','error');return;}
+  try{
+    if(id){ await api('PUT','/metas/'+id,{metaMensal,obs,responsaveis}); }
+    else   { await api('POST','/metas',{ano,metaMensal,obs,responsaveis}); }
+    metasData=await api('GET','/metas');
+    closeModal(); renderMetas();
+    showToast('Meta salva','success');
+  }catch(e){ if(!e.validacao) showToast('Erro: '+e.message,'error'); }
+}
+
+async function deletarMeta(id,ano){
+  if(!confirm(`Excluir a meta de ${ano}? Esta ação não pode ser desfeita.`))return;
+  try{
+    await api('DELETE','/metas/'+id);
+    metasData=await api('GET','/metas');
+    renderMetas();
+    showToast('Meta removida','success');
+  }catch(e){ showDeleteError(e); }
 }
 
 // ── LGPD ───────────────────────────────────────────────────
@@ -3289,7 +3406,7 @@ function dashDetalhe(tipo){
   box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
-function renderDashboard(d){
+async function renderDashboard(d){
   const box=$('dash-content');if(!box)return;
   dashData=d; dashDetalheAtivo='';
   const {resumo,projetos,evolucao}=d;
@@ -3411,7 +3528,54 @@ function renderDashboard(d){
     </div>`
     :'<div style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Nenhum projeto encontrado para os filtros.</div>';
 
-  box.innerHTML=cards+grafico+tabela;
+
+  // ── Progresso de metas no dashboard ──
+  let secaoMetas='';
+  try{
+    const ano=$('dash-ano')?.value||new Date().getFullYear();
+    const mes=String(new Date().getMonth()+1).padStart(2,'0');
+    const pm=await api('GET',`/metas/progresso?ano=${ano}&mes=${mes}`).catch(()=>null);
+    if(pm?.meta&&pm.progresso?.length){
+      const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      const nomeMes=MES[+mes-1];
+      const linhasMeta=pm.progresso.map(r=>{
+        const corBarra=r.status==='atingiu'?'var(--green)':r.status==='andamento'?'var(--blue)':'var(--red)';
+        const icone=r.status==='atingiu'?'✅':r.status==='andamento'?'🔵':'🔴';
+        return `<tr>
+          <td><div style="display:flex;align-items:center;gap:6px">${ownerAvatar(r)}<span style="font-size:12px">${esc(r.nome)}</span></div></td>
+          <td style="text-align:center;font-weight:600;font-size:13px;color:${corBarra}">${r.realizadas}</td>
+          <td style="text-align:center;color:var(--text2)">${r.meta}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:7px">
+              <div style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden">
+                <div style="height:100%;background:${corBarra};width:${Math.min(r.pct,100)}%;border-radius:4px;transition:width .3s"></div>
+              </div>
+              <span style="font-size:11px;font-weight:600;color:${corBarra};min-width:38px">${r.pct}%</span>
+              <span>${icone}</span>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+      secaoMetas=`<div class="card-table" style="margin-top:14px">
+        <div style="padding:10px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;font-weight:500">🎯 Meta de agendas — ${nomeMes}/${ano}</span>
+          <span style="font-size:11px;color:var(--text2)">Meta: ${pm.meta.metaMensal} agendas/mês</span>
+          <a href="#" onclick="goPage('metas');return false" style="margin-left:auto;font-size:11px;color:var(--blue)">Gerenciar metas →</a>
+        </div>
+        <div class="tw"><table style="table-layout:fixed;width:100%">
+          <thead><tr>
+            <th style="width:35%">Responsável</th>
+            <th style="width:13%;text-align:center">Realizadas</th>
+            <th style="width:12%;text-align:center">Meta</th>
+            <th style="width:40%">Progresso</th>
+          </tr></thead>
+          <tbody>${linhasMeta}</tbody>
+        </table></div>
+      </div>`;
+    }
+  }catch(_){}
+
+  box.innerHTML=cards+grafico+tabela+secaoMetas;
 }
 
 // ── Relatórios ─────────────────────────────────────────────

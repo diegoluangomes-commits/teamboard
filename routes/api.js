@@ -1386,6 +1386,154 @@ router.get('/audit/resumo', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Metas anuais ───────────────────────────────────────────
+// GET /metas — lista todas as metas com responsáveis vinculados
+router.get('/metas', async (req, res) => {
+  try {
+    const { rows: metas } = await q(
+      `SELECT * FROM metas_anuais ORDER BY ano DESC`
+    );
+    const { rows: vinculos } = await q(
+      `SELECT mr.meta_id, mr.owner_id, o.name AS owner_name
+       FROM metas_responsaveis mr
+       JOIN owners o ON o.id = mr.owner_id
+       ORDER BY o.name`
+    );
+    const resultado = metas.map(m => ({
+      id: m.id, ano: m.ano, metaMensal: m.meta_mensal, obs: m.obs||'',
+      responsaveis: vinculos.filter(v => v.meta_id === m.id)
+        .map(v => ({ id: v.owner_id, nome: v.owner_name }))
+    }));
+    send(res, resultado);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /metas — cria nova meta anual
+router.post('/metas', requireAdmin, async (req, res) => {
+  const { ano, metaMensal, obs, responsaveis } = req.body;
+  const e = validar([
+    { valor:ano,        rotulo:'Ano',          obrigatorio:true, tipo:'num' },
+    { valor:metaMensal, rotulo:'Meta mensal',  obrigatorio:true, tipo:'num' }
+  ]);
+  if (e) return erro400(res, e);
+  if (!responsaveis?.length) return erro400(res, 'Selecione ao menos um responsável.');
+  try {
+    const id = uuidv4();
+    await q(
+      `INSERT INTO metas_anuais (id,ano,meta_mensal,obs) VALUES ($1,$2,$3,$4)`,
+      [id, +ano, +metaMensal, obs||'']
+    );
+    for (const ownerId of responsaveis) {
+      await q(`INSERT INTO metas_responsaveis (meta_id,owner_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, ownerId]);
+    }
+    send(res, { ok: true, id });
+  } catch(e) {
+    if (e.code === '23505') return erro400(res, `Já existe uma meta cadastrada para ${ano}.`);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /metas/:id — atualiza meta e responsáveis
+router.put('/metas/:id', requireAdmin, async (req, res) => {
+  const { metaMensal, obs, responsaveis } = req.body;
+  const e = validar([{ valor:metaMensal, rotulo:'Meta mensal', obrigatorio:true, tipo:'num' }]);
+  if (e) return erro400(res, e);
+  if (!responsaveis?.length) return erro400(res, 'Selecione ao menos um responsável.');
+  try {
+    await q(`UPDATE metas_anuais SET meta_mensal=$1, obs=$2 WHERE id=$3`, [+metaMensal, obs||'', req.params.id]);
+    await q(`DELETE FROM metas_responsaveis WHERE meta_id=$1`, [req.params.id]);
+    for (const ownerId of responsaveis) {
+      await q(`INSERT INTO metas_responsaveis (meta_id,owner_id) VALUES ($1,$2)`, [req.params.id, ownerId]);
+    }
+    send(res, { ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /metas/:id
+router.delete('/metas/:id', requireAdmin, async (req, res) => {
+  await q(`DELETE FROM metas_anuais WHERE id=$1`, [req.params.id]);
+  send(res, { ok: true });
+});
+
+// GET /metas/progresso?ano=&mes= — realizado × meta por responsável
+router.get('/metas/progresso', async (req, res) => {
+  const ano  = req.query.ano  || new Date().getFullYear();
+  const mes  = req.query.mes  || (new Date().getMonth() + 1).toString().padStart(2,'0');
+  const mesStr = `${ano}-${String(mes).padStart(2,'0')}`;
+
+  try {
+    // Busca meta do ano
+    const { rows: [meta] } = await q(
+      `SELECT m.id, m.meta_mensal FROM metas_anuais m WHERE m.ano=$1`, [+ano]
+    );
+    if (!meta) return send(res, { meta: null, progresso: [] });
+
+    // Responsáveis vinculados
+    const { rows: responsaveis } = await q(
+      `SELECT mr.owner_id AS id, o.name, o.color, o.initials
+       FROM metas_responsaveis mr JOIN owners o ON o.id=mr.owner_id
+       WHERE mr.meta_id=$1 AND o.active=true ORDER BY o.name`, [meta.id]
+    );
+    if (!responsaveis.length) return send(res, { meta, progresso: [] });
+
+    // Tarefas do mês de cada responsável
+    const { rows: tarefas } = await q(`
+      SELECT t.id, t.owner_id, t.status, t.date, t.date_start, t.date_end
+      FROM tasks t
+      WHERE t.owner_id = ANY($1::text[])
+        AND t.status NOT IN ('cancel','na')
+        AND (
+          (t.date_start IS NULL OR t.date_start='' OR t.date_start=t.date_end)
+          AND (t.date LIKE $2 OR t.date_start LIKE $2)
+          OR
+          (t.date_start IS NOT NULL AND t.date_start<>'' AND t.date_start<>t.date_end
+           AND t.date_start <= $3 AND t.date_end >= $4)
+        )
+    `, [responsaveis.map(r=>r.id), mesStr+'-%', mesStr+'-31', mesStr+'-01']);
+
+    const { rows: daily } = await q(
+      `SELECT task_id, date, status FROM task_daily_status WHERE date LIKE $1`, [mesStr+'-%']
+    );
+    const dailyMap = {};
+    daily.forEach(d => { dailyMap[d.task_id+'|'+d.date] = d.status; });
+
+    // Conta agendas realizadas por responsável
+    const progresso = responsaveis.map(owner => {
+      const minhas = tarefas.filter(t => t.owner_id === owner.id);
+      let realizadas = 0;
+
+      minhas.forEach(t => {
+        const temPeriodo = t.date_start && t.date_end && t.date_start !== t.date_end;
+        if (!temPeriodo) {
+          if (t.status === 'done') realizadas++;
+        } else {
+          // Conta dias do mês realizados
+          const ini = new Date(t.date_start+'T00:00:00');
+          const fim = new Date(t.date_end+'T00:00:00');
+          for (let d = new Date(ini); d <= fim; d.setDate(d.getDate()+1)) {
+            const dow = d.getDay();
+            if (dow===0||dow===6) continue;
+            const ds = d.toISOString().slice(0,10);
+            if (!ds.startsWith(mesStr)) continue;
+            const st = dailyMap[t.id+'|'+ds];
+            if (st === 'cancel') continue;
+            if (st === 'done') realizadas++;
+          }
+        }
+      });
+
+      const pct = Math.round(realizadas / meta.meta_mensal * 100);
+      return {
+        id: owner.id, nome: owner.name, color: owner.color, initials: owner.initials,
+        realizadas, meta: meta.meta_mensal, pct,
+        status: pct >= 100 ? 'atingiu' : pct >= 70 ? 'andamento' : 'abaixo'
+      };
+    }).sort((a,b) => b.realizadas - a.realizadas);
+
+    send(res, { meta: { id: meta.id, metaMensal: meta.meta_mensal, ano: +ano, mes: mesStr }, progresso });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── LGPD ───────────────────────────────────────────────────
 // Prazo de retenção definido pela Solidez: 5 anos após o encerramento
 const RETENCAO_ANOS = 5;

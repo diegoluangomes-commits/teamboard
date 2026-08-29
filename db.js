@@ -187,6 +187,23 @@ async function initDB() {
     ALTER TABLE clients  ADD COLUMN IF NOT EXISTS email        TEXT;
   `).catch(()=>{});
 
+  // ── Migration: metas anuais de agendas por responsável ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS metas_anuais (
+      id          TEXT PRIMARY KEY,
+      ano         INTEGER NOT NULL UNIQUE,
+      meta_mensal INTEGER NOT NULL DEFAULT 30,
+      obs         TEXT,
+      created_at  TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS metas_responsaveis (
+      meta_id  TEXT NOT NULL REFERENCES metas_anuais(id) ON DELETE CASCADE,
+      owner_id TEXT NOT NULL,
+      PRIMARY KEY (meta_id, owner_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_metas_resp_owner ON metas_responsaveis(owner_id);
+  `).catch(e => console.warn('[DB] Aviso metas:', e.message));
+
   // ── Migration: tabela de status diário de agendas ──
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_daily_status (
