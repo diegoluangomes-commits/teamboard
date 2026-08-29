@@ -1004,7 +1004,7 @@ router.post('/notify/agendas-do-dia', requireApiKey, async (req, res) => {
     );
     if (!owners.length) return send(res, { ok: true, enviados: 0, msg: 'Nenhum responsável com notificação ativa.' });
 
-    // Busca todas as tarefas do dia
+    // Busca todas as tarefas do dia — tarefas de dia único ou que cobrem hoje no período
     const { rows: tarefas } = await q(`
       SELECT t.id, t.name, t.owner_id, t.turno, t.date, t.date_start, t.date_end,
              t.status, p.name AS proj_nome, c.name AS cli_nome,
@@ -1014,11 +1014,13 @@ router.post('/notify/agendas-do-dia', requireApiKey, async (req, res) => {
       LEFT JOIN clients c ON c.id = p.client_id
       WHERE t.status NOT IN ('cancel','na','done')
         AND (
-          (t.date_start IS NULL OR t.date_start = '' OR t.date_start = t.date_end)
-          AND (t.date = $1 OR t.date_start = $1)
+          -- Tarefa de dia único: data bate com hoje
+          ( (t.date_start IS NULL OR t.date_start = '' OR t.date_start = t.date_end)
+            AND (t.date = $1 OR t.date_start = $1) )
           OR
-          (t.date_start < $1 OR t.date_start = $1) AND (t.date_end >= $1)
-            AND (t.date_start IS NOT NULL AND t.date_start <> '' AND t.date_start <> t.date_end)
+          -- Tarefa com período: hoje está dentro do intervalo
+          ( t.date_start IS NOT NULL AND t.date_start <> '' AND t.date_start <> t.date_end
+            AND t.date_start <= $1 AND t.date_end >= $1 )
         )
       ORDER BY t.owner_id, t.turno
     `, [hojeStr]);
