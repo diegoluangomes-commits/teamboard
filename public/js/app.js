@@ -3291,6 +3291,16 @@ function exportarDashboardPDF(){
       </div>
     </div>`;
 
+  // Força orientação horizontal adicionando estilo temporário
+  const styleId='print-landscape-force';
+  let styleEl=document.getElementById(styleId);
+  if(!styleEl){
+    styleEl=document.createElement('style');
+    styleEl.id=styleId;
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent='@page{size:A4 landscape!important;margin:12mm 10mm!important;}';
+
   // Aguarda renderização e abre impressão
   setTimeout(()=>{
     // Remove qualquer scroll que possa cortar o conteúdo
@@ -3299,7 +3309,10 @@ function exportarDashboardPDF(){
     if(content)content.style.overflow='visible';
     window.print();
     // Restaura depois
-    setTimeout(()=>{ if(content)content.style.overflow=prev; },500);
+    setTimeout(()=>{
+      if(content)content.style.overflow=prev;
+      styleEl.textContent='';
+    },500);
   }, 150);
 }
 
