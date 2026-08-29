@@ -354,6 +354,7 @@ function applyPerfilRestrictions(){
   // Usuários — gestão de acessos permanece exclusiva do admin
   const niUsers=$('ni-users');if(niUsers)niUsers.style.display=isAdmin?'flex':'none';
   const niAudit=$('ni-audit');if(niAudit)niAudit.style.display=isAdmin?'flex':'none';
+  const niMetas=$('ni-metas');if(niMetas)niMetas.style.display=isAdmin?'flex':'none';
   const btnNU=$('btn-new-user');if(btnNU)btnNU.style.display=isAdmin?'':'none';
   const arU=$('add-row-user');if(arU)arU.style.display=isAdmin?'':'none';
   // Responsável: oculta exclusões e criação de projetos (classe .admin-only no CSS)
@@ -3575,7 +3576,7 @@ async function renderDashboard(d){
     }
   }catch(_){}
 
-  box.innerHTML=cards+grafico+tabela+secaoMetas;
+  box.innerHTML=cards+secaoMetas+grafico+tabela;
 }
 
 // ── Relatórios ─────────────────────────────────────────────
