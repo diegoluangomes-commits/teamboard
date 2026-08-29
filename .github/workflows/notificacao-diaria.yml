@@ -1,0 +1,28 @@
+name: Notificação diária de agendas
+
+on:
+  schedule:
+    # Todo dia às 10:00 UTC = 07:00 Brasília (UTC-3)
+    - cron: '0 10 * * 1-5'   # segunda a sexta
+  workflow_dispatch: # permite disparar manualmente para teste
+
+jobs:
+  notificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Enviar notificações do dia
+        run: |
+          RESPOSTA=$(curl -s -w "\nHTTP:%{http_code}" -X POST \
+            "https://solidezteam.solidez.net/api/notify/agendas-do-dia" \
+            -H "x-api-key: ${{ secrets.TEAMSOLIDEZ_API_KEY }}" \
+            -H "Content-Type: application/json")
+          HTTP_CODE=$(echo "$RESPOSTA" | grep "HTTP:" | cut -d: -f2)
+          CORPO=$(echo "$RESPOSTA" | grep -v "HTTP:")
+          echo "Resposta HTTP: $HTTP_CODE"
+          echo "Resultado: $CORPO"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERRO: resposta inesperada"
+            exit 1
+          fi

@@ -178,6 +178,7 @@ async function initDB() {
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS date_end   TEXT;
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS status        TEXT DEFAULT 'ativo';
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS tipo          TEXT DEFAULT 'implantacao';
+    ALTER TABLE owners   ADD COLUMN IF NOT EXISTS notif_email   BOOLEAN DEFAULT true;
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS cancel_date   TEXT;
     ALTER TABLE clients  ADD COLUMN IF NOT EXISTS contact_name TEXT;

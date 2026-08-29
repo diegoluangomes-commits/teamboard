@@ -1486,6 +1486,7 @@ function renderOwnersTable(){
   tb.innerHTML=owners.map(o=>`<tr onclick="editOwner('${o.id}')" style="cursor:pointer">
     <td><div style="display:flex;align-items:center;gap:7px">${ownerAvatar(o)}<span>${esc(o.name)}</span></div></td>
     <td style="color:var(--text2)">${esc(o.email||'')}</td>
+    <td style="font-size:11px">${o.email&&o.notifEmail!==false?'<span title="Notificação diária ativa">📧 ativo</span>':'<span style="color:var(--text3)">—</span>'}</td>
     <td><span class="${o.active?'badge-active':'badge-inactive'}">${o.active?'Ativo':'Inativo'}</span></td>
     <td><button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteOwner('${o.id}')">×</button></td>
   </tr>`).join('');
@@ -1509,6 +1510,16 @@ function ownerHTML(o){
       <option value="true"${o?.active!==false?' selected':''}>Ativo</option>
       <option value="false"${o?.active===false?' selected':''}>Inativo</option>
     </select></div>
+    <div class="fr" style="align-items:center;gap:10px">
+      <label style="flex:1">📧 Notificação de agendas por e-mail</label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px">
+        <input type="checkbox" id="ow-notif" ${o?.notifEmail!==false?'checked':''} style="width:16px;height:16px;cursor:pointer"/>
+        Enviar resumo diário das agendas
+      </label>
+    </div>
+    <div id="ow-notif-aviso" style="display:${(!o?.email)?'block':'none'};font-size:11px;color:var(--amber);margin-top:-6px;margin-bottom:4px">
+      ⚠ Cadastre um e-mail para habilitar as notificações.
+    </div>
     <div class="ma"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveOwner()">Salvar responsável</button></div>
   </div>`;
 }
@@ -1523,7 +1534,7 @@ function editOwner(id){const o=owners.find(x=>x.id===id);if(!o)return;editingOwn
 async function saveOwner(){
   const name=$('ow-name').value.trim();if(!name)return;
   const initials=$('ow-initials').value.trim().toUpperCase()||name.slice(0,2).toUpperCase();
-  const body={name,initials,email:$('ow-email').value,color:$('ow-color').value,active:$('ow-active').value==='true'};
+  const body={name,initials,email:$('ow-email').value,color:$('ow-color').value,active:$('ow-active').value==='true',notifEmail:$('ow-notif')?.checked!==false};
   try{
     if(editingOwner){await api('PUT','/owners/'+editingOwner,body);}else{await api('POST','/owners',body);}
   }catch(e){ return; }

@@ -383,7 +383,8 @@ const toProduct = r => r ? ({
 const toOwner = r => r ? ({
   id: r.id, name: r.name, email: r.email||'',
   color: r.color||'#185FA5', initials: r.initials||'',
-  active: r.active
+  active: r.active,
+  notifEmail: r.notif_email !== false // default true
 }) : null;
 
 const toSeller = r => r ? ({
@@ -820,10 +821,10 @@ router.post('/owners', async (req, res) => {
 });
 
 router.put('/owners/:id', async (req, res) => {
-  const { name, email, color, initials, active } = req.body;
+  const { name, email, color, initials, active, notifEmail } = req.body;
   const { rows } = await q(
-    'UPDATE owners SET name=$1,email=$2,color=$3,initials=$4,active=$5 WHERE id=$6 RETURNING *',
-    [name, email||'', color||'#185FA5', initials||name.slice(0,2).toUpperCase(), active!==false, req.params.id]
+    'UPDATE owners SET name=$1,email=$2,color=$3,initials=$4,active=$5,notif_email=$6 WHERE id=$7 RETURNING *',
+    [name, email||'', color||'#185FA5', initials||name.slice(0,2).toUpperCase(), active!==false, notifEmail!==false, req.params.id]
   );
   if (!rows.length) return notFound(res,'Responsável');
   send(res, toOwner(rows[0]));
@@ -982,6 +983,100 @@ send(res, { ok: true, sent: true, to: email });
   } catch(err) {
     console.log(`[Notificação] ${err.message}`);
     send(res, { ok: true, sent: false, reason: err.message });
+  }
+});
+
+// ── Notificação diária de agendas ─────────────────────────
+// POST /notify/agendas-do-dia
+// Envia e-mail para cada responsável com notifEmail=true listando suas agendas do dia.
+// Chamada pelo GitHub Actions toda manhã às 07:00 (Brasília).
+// Protegida pela EXTERNAL_API_KEY para não exigir sessão de navegador.
+router.post('/notify/agendas-do-dia', requireApiKey, async (req, res) => {
+  const hoje = new Date();
+  // Ajusta para horário de Brasília (UTC-3)
+  const hojeStr = new Date(hoje.getTime() - 3 * 60 * 60 * 1000)
+    .toISOString().slice(0, 10);
+
+  try {
+    // Busca responsáveis ativos com e-mail e notificação habilitada
+    const { rows: owners } = await q(
+      `SELECT id, name, email FROM owners WHERE active=true AND notif_email=true AND email IS NOT NULL AND email <> ''`
+    );
+    if (!owners.length) return send(res, { ok: true, enviados: 0, msg: 'Nenhum responsável com notificação ativa.' });
+
+    // Busca todas as tarefas do dia
+    const { rows: tarefas } = await q(`
+      SELECT t.id, t.name, t.owner_id, t.turno, t.date, t.date_start, t.date_end,
+             t.status, p.name AS proj_nome, c.name AS cli_nome,
+             c.contact_name AS cli_contato, c.phone AS cli_phone
+      FROM tasks t
+      JOIN projects p ON p.id = t.proj_id
+      LEFT JOIN clients c ON c.id = p.client_id
+      WHERE t.status NOT IN ('cancel','na','done')
+        AND (
+          (t.date_start IS NULL OR t.date_start = '' OR t.date_start = t.date_end)
+          AND (t.date = $1 OR t.date_start = $1)
+          OR
+          (t.date_start < $1 OR t.date_start = $1) AND (t.date_end >= $1)
+            AND (t.date_start IS NOT NULL AND t.date_start <> '' AND t.date_start <> t.date_end)
+        )
+      ORDER BY t.owner_id, t.turno
+    `, [hojeStr]);
+
+    // Filtra dias que foram desmarcados pelo cliente (task_daily_status = cancel)
+    const { rows: cancelados } = await q(
+      `SELECT task_id FROM task_daily_status WHERE date=$1 AND status='cancel'`, [hojeStr]
+    );
+    const idsCancelados = new Set(cancelados.map(r => r.task_id));
+    const tarefasAtivas = tarefas.filter(t => !idsCancelados.has(t.id));
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: +process.env.SMTP_PORT || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    });
+
+    const diasSemana = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+    const [ano,mes,dia] = hojeStr.split('-');
+    const dataExtenso = `${dia}/${mes}/${ano} (${diasSemana[hoje.getDay()]})`;
+
+    let enviados = 0, semAgenda = 0;
+
+    for (const owner of owners) {
+      const minhas = tarefasAtivas.filter(t => t.owner_id === owner.id);
+      if (!minhas.length) { semAgenda++; continue; }
+
+      const manha = minhas.filter(t => t.turno !== 'tarde');
+      const tarde  = minhas.filter(t => t.turno === 'tarde');
+
+      const linhasTarefa = (lista) => lista.map(t => {
+        const contato = [t.cli_contato, t.cli_phone].filter(Boolean).join(' — ');
+        return `  📋 ${t.name}\n     Cliente: ${t.cli_nome||'—'}${contato?' | '+contato:''}\n     Projeto: ${t.proj_nome}`;
+      }).join('\n\n');
+
+      let corpo = `Olá ${owner.name},\n\nAqui estão suas agendas para hoje, ${dataExtenso}:\n\n`;
+      if (manha.length) corpo += `☀️ MANHÃ (${manha.length} agenda${manha.length>1?'s':''})\n\n${linhasTarefa(manha)}\n\n`;
+      if (tarde.length)  corpo += `🌙 TARDE (${tarde.length} agenda${tarde.length>1?'s':''})\n\n${linhasTarefa(tarde)}\n\n`;
+      corpo += `Total: ${minhas.length} agenda${minhas.length>1?'s':''} hoje.\n\n`;
+      corpo += `Acesse o sistema para ver detalhes e marcar como realizado:\n👉 https://solidezteam.solidez.net\n\nEquipe TeamSolidez\nSolidez Soluções`;
+
+      try {
+        await transporter.sendMail({
+          from: `"TeamSolidez" <${process.env.SMTP_USER}>`,
+          to: owner.email,
+          subject: `[TeamSolidez] Suas agendas de hoje — ${dataExtenso} (${minhas.length} agenda${minhas.length>1?'s':''})`,
+          text: corpo
+        });
+        enviados++;
+      } catch (err) {
+        console.warn(`[Notify] Falha ao enviar para ${owner.email}:`, err.message);
+      }
+    }
+
+    send(res, { ok: true, data: hojeStr, enviados, semAgenda, totalResponsaveis: owners.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
