@@ -629,6 +629,8 @@ function renderBoard() {
     cont.appendChild(d);
   });
   renderKanban(ft);
+  // Atualiza feed de comentários se a aba estiver ativa
+  if($('view-cmt')?.style.display!=='none') renderComentarios();
 }
 
 function renderKanban(ft) {
@@ -2871,6 +2873,142 @@ function switchView(v,el){
   document.querySelectorAll('.vt').forEach(t=>t.classList.remove('act'));el.classList.add('act');
   $('view-tbl').style.display=v==='tbl'?'block':'none';
   $('view-kan').style.display=v==='kan'?'block':'none';
+}
+
+function switchView(v,el){
+  document.querySelectorAll('.vt').forEach(t=>t.classList.remove('act'));el.classList.add('act');
+  $('view-tbl').style.display=v==='tbl'?'block':'none';
+  $('view-kan').style.display=v==='kan'?'block':'none';
+  $('view-cmt').style.display=v==='cmt'?'block':'none';
+  if(v==='cmt') initComentarios();
+}
+
+// ── Aba de Comentários ─────────────────────────────────────
+function initComentarios(){
+  // Popula filtro de responsáveis
+  const sel=$('cmt-fil-owner');
+  if(sel && sel.options.length<=1){
+    const usados=new Set(tasks.map(t=>t.ownerId).filter(Boolean));
+    owners.filter(o=>usados.has(o.id)).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))
+      .forEach(o=>{ const opt=document.createElement('option'); opt.value=o.id; opt.text=o.name; sel.appendChild(opt); });
+  }
+  renderComentarios();
+}
+
+function renderComentarios(){
+  const feed=$('cmt-feed'); if(!feed)return;
+  const filOwner=$('cmt-fil-owner')?.value||'';
+  const filDias=parseInt($('cmt-fil-periodo')?.value||'0');
+  const corte=filDias?new Date(Date.now()-filDias*86400000):null;
+
+  // Coleta todos os comentários de todas as tarefas do projeto ativo
+  const itens=[];
+  tasks.forEach(t=>{
+    if(!t.comments?.length)return;
+    t.comments.forEach(c=>{
+      if(filOwner&&t.ownerId!==filOwner)return;
+      const dt=new Date(c.createdAt||c.date||0);
+      if(corte&&dt<corte)return;
+      itens.push({tarefa:t.name,tarefaId:t.id,ownerId:t.ownerId,
+        autor:c.author||'—',texto:c.text||'',data:dt});
+    });
+  });
+  itens.sort((a,b)=>b.data-a.data);
+
+  const total=$('cmt-total');
+  if(total)total.textContent=itens.length+' comentário'+(itens.length!==1?'s':'');
+
+  if(!itens.length){
+    feed.innerHTML='<div style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Nenhum comentário encontrado para os filtros.</div>';
+    return;
+  }
+
+  const proj=projects.find(p=>p.id===activeProj);
+  const cli=proj?clients.find(c=>c.id===proj.clientId):null;
+
+  feed.innerHTML=itens.map(item=>{
+    const owner=owners.find(o=>o.id===item.ownerId);
+    const quando=item.data.getTime()?
+      item.data.toLocaleDateString('pt-BR')+' '+item.data.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+      :'—';
+    return `<div class="cmt-card" style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r-lg);padding:13px 15px;margin-bottom:9px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+        ${ownerAvatar(owner)}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500">${esc(item.autor)}</div>
+          <div style="font-size:10px;color:var(--text2);margin-top:1px">
+            em <strong>${esc(item.tarefa)}</strong> · ${quando}
+          </div>
+        </div>
+        <button class="btn btn-sm" onclick="openEditTask('${item.tarefaId}')" title="Abrir tarefa"
+          style="font-size:10px;padding:3px 8px;flex-shrink:0">Ver tarefa</button>
+      </div>
+      <div style="font-size:12px;line-height:1.55;color:var(--text);padding-left:32px;white-space:pre-wrap">${esc(item.texto)}</div>
+    </div>`;
+  }).join('');
+}
+
+function exportarComentariosPDF(){
+  const feed=$('cmt-feed');
+  if(!feed||!feed.children.length){ showToast('Nenhum comentário para exportar','error'); return; }
+
+  const proj=projects.find(p=>p.id===activeProj);
+  const cli=proj?clients.find(c=>c.id===proj.clientId):null;
+  const total=$('cmt-total')?.textContent||'';
+  const filPer=$('cmt-fil-periodo');
+  const filOwner=$('cmt-fil-owner');
+  const perLabel=filPer?.options[filPer.selectedIndex]?.text||'Todo o período';
+  const ownerLabel=filOwner?.value?(owners.find(o=>o.id===filOwner.value)?.name||''):'Todos os responsáveis';
+  const data=new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  // Injeta cabeçalho do PDF
+  let hdr=$('cmt-pdf-header');
+  if(!hdr){ hdr=document.createElement('div'); hdr.id='cmt-pdf-header'; feed.prepend(hdr); }
+  hdr.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;padding-bottom:10px;border-bottom:1.5px solid #185FA5">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#185FA5">Relatório de Comentários — ${esc(proj?.name||'Projeto')}</div>
+        ${cli?`<div style="font-size:11px;color:#555;margin-top:2px">Cliente: ${esc(cli.name)}</div>`:''}
+        <div style="font-size:11px;color:#555;margin-top:2px">Solidez Soluções Empresariais</div>
+      </div>
+      <div style="text-align:right;font-size:10px;color:#888">
+        <div>Emitido em ${data}</div>
+        <div>Período: ${perLabel} · ${ownerLabel}</div>
+        <div>${total}</div>
+      </div>
+    </div>`;
+
+  // Estilo temporário para impressão
+  const styleId='cmt-print-style';
+  let styleEl=document.getElementById(styleId);
+  if(!styleEl){ styleEl=document.createElement('style'); styleEl.id=styleId; document.head.appendChild(styleEl); }
+  styleEl.textContent=`
+    @media print {
+      .topbar,.sidebar,.ph,.vtabs,.btn,#cmt-fil-owner,#cmt-fil-periodo,#cmt-total,
+      #view-tbl,#view-kan,.sbar{display:none!important}
+      .layout{display:block!important}
+      .content{padding:0!important;overflow:visible!important}
+      .page{display:none!important}
+      #page-board{display:block!important}
+      #view-cmt{display:block!important}
+      #cmt-pdf-header{display:block!important}
+      .cmt-card{break-inside:avoid;border:0.5px solid #ddd!important;background:#fff!important}
+      body{background:#fff!important;color:#111!important}
+      @page{size:A4 portrait;margin:15mm 12mm}
+    }`;
+
+  const content=document.querySelector('.content');
+  const prev=content?.style.overflow||'';
+  if(content)content.style.overflow='visible';
+
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>{
+      if(content)content.style.overflow=prev;
+      styleEl.textContent='';
+      if(hdr)hdr.remove();
+    },600);
+  },150);
 }
 
 // ── Dashboard de Equipe ────────────────────────────────────

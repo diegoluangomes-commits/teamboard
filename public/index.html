@@ -181,6 +181,7 @@
           <div class="vtabs">
             <div class="vt act" onclick="switchView('tbl',this)">Tabela</div>
             <div class="vt" onclick="switchView('kan',this)">Kanban</div>
+            <div class="vt" onclick="switchView('cmt',this)">💬 Comentários</div>
           </div>
           <button class="btn btn-green" onclick="exportCSV()">↓ CSV</button>
         </div>
@@ -195,6 +196,23 @@
       </div>
       <div id="view-tbl"><div id="groups-cont"></div></div>
       <div id="view-kan" style="display:none"><div class="kboard" id="kboard"></div></div>
+      <div id="view-cmt" style="display:none">
+        <div style="padding:10px 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <select id="cmt-fil-owner" onchange="renderComentarios()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)"><option value="">Todos responsáveis</option></select>
+          <select id="cmt-fil-periodo" onchange="renderComentarios()" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text)">
+            <option value="">Todo o período</option>
+            <option value="7">Últimos 7 dias</option>
+            <option value="30">Últimos 30 dias</option>
+            <option value="90">Últimos 90 dias</option>
+          </select>
+          <span id="cmt-total" style="font-size:11px;color:var(--text2)"></span>
+          <button class="btn" onclick="exportarComentariosPDF()" style="margin-left:auto;display:flex;align-items:center;gap:5px">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 10h9M6.5 2v6M4 6l2.5 2.5L9 6"/></svg>
+            PDF
+          </button>
+        </div>
+        <div id="cmt-feed"></div>
+      </div>
     </div>
 
     <!-- Modelos de Tarefa -->
