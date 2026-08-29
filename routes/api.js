@@ -29,11 +29,13 @@ function requireAuth(req, res, next) {
 
 // Rotas liberadas sem sessão
 const ROTAS_PUBLICAS = ['/login', '/logout-local'];
+const ROTAS_API_KEY  = ['/notify/agendas-do-dia']; // protegidas por API key, não por sessão
 
 // Trava global: qualquer rota não listada acima exige sessão ativa.
 router.use((req, res, next) => {
   if (ROTAS_PUBLICAS.includes(req.path)) return next();
   if (req.path.startsWith('/ext/'))      return next();
+  if (ROTAS_API_KEY.includes(req.path))  return next(); // usa API key própria
   return requireAuth(req, res, next);
 });
 
@@ -195,7 +197,7 @@ async function nomeDoRegistro(tabela, id) {
 router.use(async (req, res, next) => {
   const metodo = req.method;
   if (!['POST','PUT','PATCH','DELETE'].includes(metodo)) return next();
-  if (req.path.startsWith('/ext/') || req.path === '/login' || req.path === '/logout-local') return next();
+  if (req.path.startsWith('/ext/') || req.path === '/login' || req.path === '/logout-local' || ROTAS_API_KEY.includes(req.path)) return next();
 
   // /clients/abc → ['clients','abc']
   const partes  = req.path.split('/').filter(Boolean);
