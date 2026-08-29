@@ -2848,6 +2848,10 @@ function goPage(p){
   if(p==='projects') renderProjGrid();
   if(p==='notif'){loadAllTasksForCal().then(renderNotifs);}
   if(p==='cal'){loadAllTasksForCal().then(renderCalendar);}
+  if(p==='dashboard-resp'){
+    initDashResp();
+    loadDashResp();
+  }
   if(p==='metas'){ loadMetas(); }
   if(p==='privacidade'){ loadPrivacidade(); }
   if(p==='audit'){
@@ -2867,6 +2871,151 @@ function switchView(v,el){
   document.querySelectorAll('.vt').forEach(t=>t.classList.remove('act'));el.classList.add('act');
   $('view-tbl').style.display=v==='tbl'?'block':'none';
   $('view-kan').style.display=v==='kan'?'block':'none';
+}
+
+// ── Dashboard de Equipe ────────────────────────────────────
+async function initDashResp(){
+  const anoSel=$('dresp-ano');
+  if(anoSel && !anoSel.options.length){
+    const atual=new Date().getFullYear();
+    [atual+1,atual,atual-1,atual-2].forEach(a=>{
+      const o=document.createElement('option');
+      o.value=a; o.text=a;
+      if(a===atual)o.selected=true;
+      anoSel.appendChild(o);
+    });
+  }
+  const mesSel=$('dresp-mes');
+  if(mesSel){
+    const mesAtual=String(new Date().getMonth()+1).padStart(2,'0');
+    mesSel.value=mesAtual;
+  }
+}
+
+async function loadDashResp(){
+  const box=$('dresp-content');if(!box)return;
+  box.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3)">Carregando…</div>';
+  const ano=$('dresp-ano')?.value||new Date().getFullYear();
+  const mes=$('dresp-mes')?.value||String(new Date().getMonth()+1).padStart(2,'0');
+  try{
+    const pm=await api('GET',`/metas/progresso?ano=${ano}&mes=${mes}`);
+    renderDashResp(pm,ano,mes);
+  }catch(e){
+    box.innerHTML=`<div style="padding:40px;text-align:center;color:var(--red)">Erro: ${esc(e.message)}</div>`;
+  }
+}
+
+// Detalhe de agendas realizadas de um responsável no mês
+let dashRespDetalheAtivo='';
+async function toggleDetalheResp(ownerId,nome,ano,mes){
+  const boxId='dresp-detalhe-'+ownerId;
+  const box=document.getElementById(boxId);if(!box)return;
+  if(dashRespDetalheAtivo===ownerId){
+    box.innerHTML=''; dashRespDetalheAtivo=''; return;
+  }
+  dashRespDetalheAtivo=ownerId;
+  box.innerHTML='<div style="padding:8px;color:var(--text3);font-size:11px">Carregando agendas…</div>';
+  const mesStr=`${ano}-${mes}`;
+  try{
+    // Busca tarefas realizadas do responsável no mês
+    const tasks=await api('GET',`/tasks?projId=all`).catch(()=>null);
+    // Usa endpoint de agendas-realizadas que já temos no dashboard
+    const d=await api('GET',`/dashboard?ano=${ano}&ownerId=${ownerId}`);
+    const minhas=d.projetos||[];
+    const realizadas=minhas.filter(p=>p.realizadas>0);
+    if(!realizadas.length){box.innerHTML='<div style="padding:10px 14px;font-size:11px;color:var(--text3)">Nenhuma agenda realizada neste mês.</div>';return;}
+    box.innerHTML=`<div style="padding:10px 14px;border-top:0.5px solid var(--border)">
+      <div style="font-size:11px;font-weight:500;margin-bottom:8px;color:var(--text2)">Agendas realizadas — ${nome} (${mesStr})</div>
+      <table style="width:100%;font-size:11px;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2)">
+          <th style="text-align:left;padding:5px 8px">Projeto</th>
+          <th style="text-align:left;padding:5px 8px">Cliente</th>
+          <th style="text-align:center;padding:5px 8px">Realizadas</th>
+          <th style="text-align:center;padding:5px 8px">Agendadas</th>
+        </tr></thead>
+        <tbody>${realizadas.map(p=>`<tr style="border-top:0.5px solid var(--border)">
+          <td style="padding:5px 8px">${esc(p.nome)}</td>
+          <td style="padding:5px 8px;color:var(--text2)">${esc(p.cliente)||'—'}</td>
+          <td style="text-align:center;padding:5px 8px;font-weight:600;color:var(--green)">${p.realizadas}</td>
+          <td style="text-align:center;padding:5px 8px;color:var(--text2)">${p.agendadas}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  }catch(e){ box.innerHTML=`<div style="padding:10px;color:var(--red);font-size:11px">Erro: ${esc(e.message)}</div>`; }
+}
+
+function renderDashResp(pm,ano,mes){
+  const box=$('dresp-content');if(!box)return;
+  const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  if(!pm?.meta){
+    box.innerHTML=`<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">
+      Nenhuma meta cadastrada para ${ano}.<br><br>
+      <button class="btn btn-blue admin-only" onclick="goPage('metas')">Cadastrar meta →</button>
+    </div>`;
+    return;
+  }
+
+  if(!pm.progresso?.length){
+    box.innerHTML='<div style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Nenhum responsável vinculado à meta de '+ano+'.</div>';
+    return;
+  }
+
+  const corBarra=r=>r.status==='atingiu'?'var(--green)':r.status==='andamento'?'var(--blue)':'var(--red)';
+  const icone=r=>r.status==='atingiu'?'✅':r.status==='andamento'?'🔵':'🔴';
+  const atingiram=pm.progresso.filter(r=>r.status==='atingiu').length;
+
+  const resumo=`
+    <div class="sbar" style="margin-bottom:14px">
+      <div class="sc flex1"><div class="slabel">Responsáveis</div><div class="sval">${pm.progresso.length}</div></div>
+      <div class="sc flex1"><div class="slabel">Meta mensal</div><div class="sval blue">${pm.meta.metaMensal}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">agendas/mês</div></div>
+      <div class="sc flex1"><div class="slabel">Atingiram a meta</div>
+        <div class="sval" style="color:${atingiram===pm.progresso.length?'var(--green)':'var(--amber)'}">${atingiram}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">de ${pm.progresso.length}</div></div>
+      <div class="sc flex1"><div class="slabel">Período</div>
+        <div style="font-size:16px;font-weight:700">${MES[+mes-1]}/${ano}</div></div>
+    </div>`;
+
+  const linhas=pm.progresso.map(r=>`
+    <tr>
+      <td><div style="display:flex;align-items:center;gap:7px">${ownerAvatar(r)}<span style="font-size:12px">${esc(r.nome)}</span></div></td>
+      <td style="text-align:center">
+        <button onclick="toggleDetalheResp('${r.id}','${esc(r.nome)}','${ano}','${mes}')"
+          style="background:none;border:none;cursor:pointer;font-size:13px;font-weight:700;color:${corBarra(r)};text-decoration:underline;text-underline-offset:2px"
+          title="Clique para ver as agendas realizadas">
+          ${r.realizadas}
+        </button>
+      </td>
+      <td style="text-align:center;color:var(--text2)">${r.meta}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px">
+          <div style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden">
+            <div style="height:100%;background:${corBarra(r)};width:${Math.min(r.pct,100)}%;border-radius:4px"></div>
+          </div>
+          <span style="font-size:11px;font-weight:600;color:${corBarra(r)};min-width:38px">${r.pct}%</span>
+          <span>${icone(r)}</span>
+        </div>
+      </td>
+    </tr>
+    <tr><td colspan="4" style="padding:0"><div id="dresp-detalhe-${r.id}"></div></td></tr>`).join('');
+
+  box.innerHTML=resumo+`
+    <div class="card-table">
+      <div style="padding:10px 16px;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:500">
+        🎯 Progresso individual — ${MES[+mes-1]}/${ano}
+        <span style="font-size:10px;color:var(--text2);font-weight:400;margin-left:8px">Clique no número de realizadas para ver o detalhe</span>
+      </div>
+      <div class="tw"><table style="table-layout:fixed;width:100%">
+        <thead><tr>
+          <th style="width:35%">Responsável</th>
+          <th style="width:13%;text-align:center">Realizadas 🔍</th>
+          <th style="width:12%;text-align:center">Meta</th>
+          <th style="width:40%">Progresso</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table></div>
+    </div>`;
 }
 
 // ── Metas ──────────────────────────────────────────────────
@@ -3271,13 +3420,6 @@ function initDashboard(){
     ownerSel.innerHTML='<option value="">Todos responsáveis</option>'+
       owners.filter(o=>o.active!==false).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('');
   }
-  // Seleciona o mês atual no filtro
-  const mesSel=$('dash-mes');
-  if(mesSel && !mesSel.value){
-    const mesAtual=String(new Date().getMonth()+1).padStart(2,'0');
-    mesSel.value=mesAtual;
-  }
-
   const dlp=$('dl-dash-projs');
   if(dlp && !dlp.innerHTML){
     dlp.innerHTML=projects.slice()
@@ -3537,53 +3679,8 @@ async function renderDashboard(d){
     :'<div style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Nenhum projeto encontrado para os filtros.</div>';
 
 
-  // ── Progresso de metas no dashboard ──
   let secaoMetas='';
-  try{
-    const ano=$('dash-ano')?.value||new Date().getFullYear();
-    const mes=$('dash-mes')?.value||String(new Date().getMonth()+1).padStart(2,'0');
-    const pm=await api('GET',`/metas/progresso?ano=${ano}&mes=${mes}`).catch(()=>null);
-    if(pm?.meta&&pm.progresso?.length){
-      const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-      const nomeMes=MES[+mes-1];
-      const linhasMeta=pm.progresso.map(r=>{
-        const corBarra=r.status==='atingiu'?'var(--green)':r.status==='andamento'?'var(--blue)':'var(--red)';
-        const icone=r.status==='atingiu'?'✅':r.status==='andamento'?'🔵':'🔴';
-        return `<tr>
-          <td><div style="display:flex;align-items:center;gap:6px">${ownerAvatar(r)}<span style="font-size:12px">${esc(r.nome)}</span></div></td>
-          <td style="text-align:center;font-weight:600;font-size:13px;color:${corBarra}">${r.realizadas}</td>
-          <td style="text-align:center;color:var(--text2)">${r.meta}</td>
-          <td>
-            <div style="display:flex;align-items:center;gap:7px">
-              <div style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden">
-                <div style="height:100%;background:${corBarra};width:${Math.min(r.pct,100)}%;border-radius:4px;transition:width .3s"></div>
-              </div>
-              <span style="font-size:11px;font-weight:600;color:${corBarra};min-width:38px">${r.pct}%</span>
-              <span>${icone}</span>
-            </div>
-          </td>
-        </tr>`;
-      }).join('');
-      secaoMetas=`<div class="card-table" style="margin-top:14px">
-        <div style="padding:10px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:8px">
-          <span style="font-size:12px;font-weight:500">🎯 Meta de agendas — ${nomeMes}/${ano}</span>
-          <span style="font-size:11px;color:var(--text2)">Meta: ${pm.meta.metaMensal} agendas/mês</span>
-          <a href="#" onclick="goPage('metas');return false" style="margin-left:auto;font-size:11px;color:var(--blue)">Gerenciar metas →</a>
-        </div>
-        <div class="tw"><table style="table-layout:fixed;width:100%">
-          <thead><tr>
-            <th style="width:35%">Responsável</th>
-            <th style="width:13%;text-align:center">Realizadas</th>
-            <th style="width:12%;text-align:center">Meta</th>
-            <th style="width:40%">Progresso</th>
-          </tr></thead>
-          <tbody>${linhasMeta}</tbody>
-        </table></div>
-      </div>`;
-    }
-  }catch(_){}
-
-  box.innerHTML=cards+secaoMetas+grafico+tabela;
+    box.innerHTML=cards+secaoMetas+grafico+tabela;
 }
 
 // ── Relatórios ─────────────────────────────────────────────
