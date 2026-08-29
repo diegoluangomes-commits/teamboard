@@ -20,8 +20,21 @@ function resetarTimeout() {
     showToast('⏰ Sua sessão expira em 10 minutos. Salve o que estiver fazendo.', 'error');
   }, TIMEOUT_MS - AVISO_MS);
   _timeoutExpira = setTimeout(() => {
-    showToast('Sessão encerrada por inatividade.', 'error');
-    setTimeout(() => location.reload(), 1500);
+    // Destrói a sessão no servidor
+    fetch('/api/logout-local', { method: 'POST' }).catch(()=>{});
+    // Mostra a tela de login com aviso de inatividade
+    const ls = document.getElementById('login-screen');
+    const err = document.getElementById('login-error');
+    const layout = document.querySelector('.layout');
+    const topbar = document.querySelector('.topbar');
+    if (err) {
+      err.innerHTML = '⏰ Sessão encerrada por inatividade (2 horas sem uso).<br>Faça login novamente para continuar.';
+      err.style.display = 'block';
+    }
+    if (layout)  layout.style.display = 'none';
+    if (topbar)  topbar.style.display = 'none';
+    if (ls) { ls.style.display = 'flex'; }
+    clearTimeout(_timeoutAviso);
   }, TIMEOUT_MS);
 }
 
