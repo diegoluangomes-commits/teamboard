@@ -1,0 +1,47 @@
+name: Backup semanal do banco
+
+on:
+  schedule:
+    # Todo domingo às 03:00 (horário UTC = 00:00 Brasília)
+    - cron: '0 3 * * 0'
+  workflow_dispatch: # permite rodar manualmente pelo GitHub
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Instalar PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Gerar dump do banco
+        env:
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          ARQUIVO="backup-$(date +%Y%m%d-%H%M).dump"
+          pg_dump \
+            -h ${{ secrets.DB_HOST }} \
+            -U ${{ secrets.DB_USER }} \
+            -d ${{ secrets.DB_NAME }} \
+            --no-acl --no-owner \
+            -F c \
+            -f "$ARQUIVO"
+          echo "ARQUIVO=$ARQUIVO" >> $GITHUB_ENV
+          echo "Backup gerado: $(du -sh $ARQUIVO)"
+
+      - name: Salvar como artefato (retido por 30 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_id }}
+          path: ${{ env.ARQUIVO }}
+          retention-days: 30
+
+      - name: Verificar tamanho mínimo
+        run: |
+          TAMANHO=$(stat -c%s "$ARQUIVO")
+          if [ "$TAMANHO" -lt 1024 ]; then
+            echo "ERRO: dump muito pequeno ($TAMANHO bytes) — possível falha"
+            exit 1
+          fi
+          echo "OK: $TAMANHO bytes"
