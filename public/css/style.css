@@ -301,26 +301,40 @@ body.perfil-responsavel .admin-only { display: none !important; }
   /* Oculta tudo exceto o conteúdo do dashboard */
   .topbar, .sidebar, .ph, #loading-bar { display: none !important; }
   .layout { display: block !important; }
-  .content { padding: 0 !important; }
+  .content { padding: 0 !important; overflow: visible !important; }
   .page { display: none !important; padding: 0 !important; }
-  #page-dashboard { display: block !important; }
+  #page-dashboard { display: block !important; overflow: visible !important; }
+  #dash-content { overflow: visible !important; }
+
+  /* Sem alturas máximas que cortam o conteúdo */
+  .tw { overflow: visible !important; max-height: none !important; }
+  table { min-width: 0 !important; width: 100% !important; }
 
   /* Remove bordas e sombras para impressão limpa */
   .card-table, .sc, .sbar { box-shadow: none !important; border: 0.5px solid #ddd !important; }
   body { background: #fff !important; color: #111 !important; }
-  table thead { background: #f5f5f5 !important; }
-  .btn { display: none !important; }
+  table thead { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .btn, #dash-detalhe { display: none !important; }
   .pill { border: 0.5px solid #ccc !important; }
+  a { color: #185FA5 !important; }
 
   /* Cabeçalho do PDF */
   #pdf-header { display: block !important; }
 
-  /* Quebra de página antes da tabela se necessário */
-  .card-table { break-inside: avoid; page-break-inside: avoid; }
+  /* Cards de resumo: não quebrar no meio */
+  .sbar { break-inside: avoid; page-break-inside: avoid; margin-bottom: 8px !important; }
+
+  /* Gráfico: tenta manter junto, mas permite quebrar se não couber */
+  .card-table:has(svg) { break-inside: avoid; page-break-inside: avoid; }
+
+  /* Tabela de projetos: cabeçalho se repete e linhas podem quebrar entre páginas */
+  .card-table { break-inside: auto; page-break-inside: auto; margin-bottom: 6px !important; }
+  thead { display: table-header-group; } /* repete cabeçalho em cada página */
+  tr { break-inside: avoid; page-break-inside: avoid; } /* cada linha fica inteira */
 
   @page {
     size: A4 landscape;
-    margin: 15mm 10mm;
+    margin: 12mm 10mm;
   }
 }
 

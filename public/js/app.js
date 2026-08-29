@@ -3292,7 +3292,15 @@ function exportarDashboardPDF(){
     </div>`;
 
   // Aguarda renderização e abre impressão
-  setTimeout(()=>{ window.print(); }, 150);
+  setTimeout(()=>{
+    // Remove qualquer scroll que possa cortar o conteúdo
+    const content=document.querySelector('.content');
+    const prev=content?.style.overflow||'';
+    if(content)content.style.overflow='visible';
+    window.print();
+    // Restaura depois
+    setTimeout(()=>{ if(content)content.style.overflow=prev; },500);
+  }, 150);
 }
 
 // ── Auditoria ──────────────────────────────────────────────
