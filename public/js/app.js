@@ -1067,7 +1067,8 @@ async function createMeetFromTask(){
   if(btn)btn.style.display='none';
   $('meet-creating').style.display='block';
   try{
-    const data=await fetch('/meet/create',{method:'POST',headers:{'Content-Type':'application/json'},
+    const data=await fetch('/meet/create',{method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrfToken()},
       body:JSON.stringify({title,date,time,duration:dur,participants:parts})}).then(r=>r.json());
     $('meet-creating').style.display='none';
     if(data.error){showToast('Erro: '+data.error,'error');if(btn)btn.style.display='flex';return;}
