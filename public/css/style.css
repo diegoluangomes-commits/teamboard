@@ -184,7 +184,7 @@ td { padding: 6px 9px; vertical-align: middle; overflow: hidden; text-overflow: 
 .cmt-meta { font-size: 10px; color: var(--text2); margin-bottom: 2px; }
 .cmt-text { font-size: 12px; line-height: 1.4; }
 .cir { display: flex; gap: 7px; align-items: flex-start; }
-.cir textarea { flex: 1; height: 44px; padding: 6px 8px; border: 0.5px solid var(--border2); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; resize: none; }
+.cir textarea { flex: 1; min-height: 44px; padding: 6px 8px; border: 0.5px solid var(--border2); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; resize: vertical; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

@@ -10,7 +10,10 @@ const notFound = (res, e)   => res.status(404).json({ error: `${e} não encontra
 const q        = (sql, p)   => pool.query(sql, p);
 
 // ── Chave de API para integração externa ──────────────────
-const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY || 'solidez-team-api-2024';
+const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY;
+if (!EXTERNAL_API_KEY) {
+  console.error('[SEGURANÇA] EXTERNAL_API_KEY não definida! Configure a variável de ambiente no Render.');
+}
 
 function requireApiKey(req, res, next) {
   const key = req.headers['x-api-key'] || req.query.apiKey;
@@ -349,6 +352,104 @@ router.post('/ext/projects/:id/tasks', requireApiKey, async (req, res) => {
 router.get('/ext/owners', requireApiKey, async (req, res) => {
   const { rows } = await q('SELECT id, name, email FROM owners WHERE active=true ORDER BY name');
   send(res, rows);
+});
+
+// GET /api/ext/metas — lista as metas cadastradas com responsáveis vinculados
+// Parâmetros: ?ano=2026 (opcional)
+router.get('/ext/metas', requireApiKey, async (req, res) => {
+  try {
+    const { ano } = req.query;
+    const { rows: metas } = await q(
+      `SELECT * FROM metas_anuais ${ano?'WHERE ano=$1':''} ORDER BY ano DESC`,
+      ano?[+ano]:[]
+    );
+    const { rows: vinculos } = await q(
+      `SELECT mr.meta_id, mr.owner_id, o.name AS owner_name, o.email AS owner_email
+       FROM metas_responsaveis mr
+       JOIN owners o ON o.id=mr.owner_id
+       ORDER BY o.name`
+    );
+    send(res, metas.map(m=>({
+      id: m.id, ano: m.ano, metaMensal: m.meta_mensal, obs: m.obs||'',
+      responsaveis: vinculos.filter(v=>v.meta_id===m.id).map(v=>({
+        id: v.owner_id, nome: v.owner_name, email: v.owner_email||''
+      }))
+    })));
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/ext/metas/progresso — progresso individual de cada responsável no mês
+// Parâmetros: ?ano=2026&mes=08
+// Retorna: meta do período + realizadas/percentual por responsável
+router.get('/ext/metas/progresso', requireApiKey, async (req, res) => {
+  const ano = req.query.ano || new Date().getFullYear();
+  const mes = req.query.mes || String(new Date().getMonth()+1).padStart(2,'0');
+  const mesStr = `${ano}-${String(mes).padStart(2,'0')}`;
+
+  try {
+    const { rows: [meta] } = await q(
+      `SELECT id, meta_mensal FROM metas_anuais WHERE ano=$1`, [+ano]
+    );
+    if (!meta) return send(res, { meta: null, periodo: mesStr, progresso: [] });
+
+    const { rows: responsaveis } = await q(
+      `SELECT mr.owner_id AS id, o.name, o.email, o.color, o.initials
+       FROM metas_responsaveis mr JOIN owners o ON o.id=mr.owner_id
+       WHERE mr.meta_id=$1 AND o.active=true ORDER BY o.name`, [meta.id]
+    );
+    if (!responsaveis.length) return send(res, { meta:{metaMensal:meta.meta_mensal,ano:+ano}, periodo:mesStr, progresso:[] });
+
+    const { rows: tarefas } = await q(`
+      SELECT t.id, t.owner_id, t.status, t.date, t.date_start, t.date_end
+      FROM tasks t
+      WHERE t.owner_id=ANY($1::text[]) AND t.status NOT IN ('cancel','na')
+        AND ((t.date_start IS NULL OR t.date_start='' OR t.date_start=t.date_end)
+              AND (t.date LIKE $2 OR t.date_start LIKE $2)
+          OR (t.date_start IS NOT NULL AND t.date_start<>'' AND t.date_start<>t.date_end
+              AND t.date_start<=$3 AND t.date_end>=$4))
+    `, [responsaveis.map(r=>r.id), mesStr+'-%', mesStr+'-31', mesStr+'-01']);
+
+    const { rows: daily } = await q(
+      `SELECT task_id, date, status FROM task_daily_status WHERE date LIKE $1`, [mesStr+'-%']
+    );
+    const dailyMap = {};
+    daily.forEach(d => { dailyMap[d.task_id+'|'+d.date]=d.status; });
+
+    const progresso = responsaveis.map(owner => {
+      const minhas = tarefas.filter(t=>t.owner_id===owner.id);
+      let realizadas = 0;
+      minhas.forEach(t => {
+        const temPeriodo = t.date_start&&t.date_end&&t.date_start!==t.date_end;
+        if (!temPeriodo) { if(t.status==='done') realizadas++; return; }
+        const ini=new Date(t.date_start+'T00:00:00'), fim=new Date(t.date_end+'T00:00:00');
+        for(let d=new Date(ini);d<=fim;d.setDate(d.getDate()+1)){
+          const dow=d.getDay(); if(dow===0||dow===6) continue;
+          const ds=d.toISOString().slice(0,10);
+          if(!ds.startsWith(mesStr)) continue;
+          const st=dailyMap[t.id+'|'+ds];
+          if(st==='cancel') continue;
+          if(st==='done') realizadas++;
+        }
+      });
+      const pct = Math.round(realizadas/meta.meta_mensal*100);
+      return {
+        id: owner.id, nome: owner.name, email: owner.email||'',
+        realizadas, meta: meta.meta_mensal, pct,
+        status: pct>=100?'atingiu':pct>=70?'andamento':'abaixo'
+      };
+    }).sort((a,b)=>b.realizadas-a.realizadas);
+
+    send(res, {
+      meta: { id: meta.id, metaMensal: meta.meta_mensal, ano: +ano },
+      periodo: mesStr,
+      total: {
+        responsaveis: progresso.length,
+        atingiram: progresso.filter(r=>r.status==='atingiu').length,
+        totalRealizado: progresso.reduce((s,r)=>s+r.realizadas,0)
+      },
+      progresso
+    });
+  } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
 // ── helpers de mapeamento ──────────────────────────────────
