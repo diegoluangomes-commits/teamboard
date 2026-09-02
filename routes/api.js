@@ -1278,6 +1278,73 @@ router.post('/task-daily-status', async (req, res) => {
 });
 
 // ── Dashboard ──────────────────────────────────────────────
+// GET /dashboard/detalhe-responsavel?ownerId=&ano=&mes=
+// Retorna apenas projetos com agendas realizadas pelo responsável no mês exato
+router.get('/dashboard/detalhe-responsavel', async (req, res) => {
+  const { ownerId, ano, mes } = req.query;
+  if (!ownerId || !ano || !mes) return erro400(res, 'ownerId, ano e mes são obrigatórios.');
+  const mesStr = `${ano}-${String(mes).padStart(2,'0')}`;
+  try {
+    // Tarefas do responsável no mês
+    const { rows: tarefas } = await q(`
+      SELECT t.id, t.owner_id, t.status, t.date, t.date_start, t.date_end,
+             p.name AS proj_nome, c.name AS cli_nome
+      FROM tasks t
+      JOIN projects p ON p.id = t.proj_id
+      LEFT JOIN clients c ON c.id = p.client_id
+      WHERE t.owner_id = $1 AND t.status NOT IN ('cancel','na')
+        AND ((t.date_start IS NULL OR t.date_start='' OR t.date_start=t.date_end)
+              AND (t.date LIKE $2 OR t.date_start LIKE $2)
+          OR (t.date_start IS NOT NULL AND t.date_start<>'' AND t.date_start<>t.date_end
+              AND t.date_start <= $3 AND t.date_end >= $4))
+    `, [ownerId, mesStr+'-%', mesStr+'-31', mesStr+'-01']);
+
+    const { rows: daily } = await q(
+      `SELECT task_id, date, status FROM task_daily_status WHERE date LIKE $1`, [mesStr+'-%']
+    );
+    const dailyMap = {};
+    daily.forEach(d => { dailyMap[d.task_id+'|'+d.date] = d.status; });
+
+    // Agrupa realizadas por projeto
+    const porProjeto = {};
+    tarefas.forEach(t => {
+      const temPeriodo = t.date_start && t.date_end && t.date_start !== t.date_end;
+      let realizadas = 0, agendadas = 0;
+
+      if (!temPeriodo) {
+        const dref = t.date_start || t.date || '';
+        if (!dref.startsWith(mesStr)) return;
+        agendadas = 1;
+        if (t.status === 'done') realizadas = 1;
+      } else {
+        const ini = new Date(t.date_start+'T00:00:00'), fim = new Date(t.date_end+'T00:00:00');
+        for (let d = new Date(ini); d <= fim; d.setDate(d.getDate()+1)) {
+          const dow = d.getDay(); if (dow===0||dow===6) continue;
+          const ds = d.toISOString().slice(0,10);
+          if (!ds.startsWith(mesStr)) continue;
+          const st = dailyMap[t.id+'|'+ds];
+          if (st === 'cancel') continue;
+          agendadas++;
+          if (st === 'done') realizadas++;
+        }
+      }
+
+      if (realizadas === 0) return; // ignora tarefas sem nada realizado no mês
+      const key = t.proj_nome;
+      if (!porProjeto[key]) porProjeto[key] = { projeto: t.proj_nome, cliente: t.cli_nome||'', realizadas:0, agendadas:0 };
+      porProjeto[key].realizadas += realizadas;
+      porProjeto[key].agendadas  += agendadas;
+    });
+
+    const resultado = Object.values(porProjeto).sort((a,b)=>b.realizadas-a.realizadas);
+    send(res, {
+      periodo: mesStr,
+      totalRealizado: resultado.reduce((s,p)=>s+p.realizadas,0),
+      projetos: resultado
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /dashboard?mes=&ano=&ownerId=&status=
 // Consolida projetos, agendas contratadas x realizadas e evolução mensal
 router.get('/dashboard', async (req, res) => {
