@@ -3067,29 +3067,35 @@ async function toggleDetalheResp(ownerId,nome,ano,mes){
   }
   dashRespDetalheAtivo=ownerId;
   box.innerHTML='<div style="padding:8px;color:var(--text3);font-size:11px">Carregando agendas…</div>';
-  const mesStr=`${ano}-${mes}`;
   try{
-    // Busca tarefas realizadas do responsável no mês
-    const tasks=await api('GET',`/tasks?projId=all`).catch(()=>null);
-    // Usa endpoint de agendas-realizadas que já temos no dashboard
+    // Usa o endpoint correto que já calcula realizadas por mês
     const d=await api('GET',`/dashboard?ano=${ano}&ownerId=${ownerId}`);
-    const minhas=d.projetos||[];
-    const realizadas=minhas.filter(p=>p.realizadas>0);
-    if(!realizadas.length){box.innerHTML='<div style="padding:10px 14px;font-size:11px;color:var(--text3)">Nenhuma agenda realizada neste mês.</div>';return;}
+    const mesStr=`${ano}-${mes}`;
+    // Filtra apenas projetos com agendas realizadas E que têm atividade no mês selecionado
+    const realizadas=( d.projetos||[]).filter(p=>p.realizadas>0);
+    if(!realizadas.length){
+      box.innerHTML='<div style="padding:10px 14px;font-size:11px;color:var(--text3)">Nenhuma agenda realizada em '+mesStr+'.</div>';
+      return;
+    }
     box.innerHTML=`<div style="padding:10px 14px;border-top:0.5px solid var(--border)">
-      <div style="font-size:11px;font-weight:500;margin-bottom:8px;color:var(--text2)">Agendas realizadas — ${nome} (${mesStr})</div>
+      <div style="font-size:11px;font-weight:500;margin-bottom:8px;color:var(--text2)">
+        Agendas realizadas — ${esc(nome)} · ${mes}/${ano}
+        <span style="font-weight:400">(${realizadas.reduce((s,p)=>s+p.realizadas,0)} no total)</span>
+      </div>
       <table style="width:100%;font-size:11px;border-collapse:collapse">
         <thead><tr style="background:var(--surface2)">
           <th style="text-align:left;padding:5px 8px">Projeto</th>
           <th style="text-align:left;padding:5px 8px">Cliente</th>
-          <th style="text-align:center;padding:5px 8px">Realizadas</th>
+          <th style="text-align:center;padding:5px 8px" title="Agendas realizadas no mês">Realizadas</th>
           <th style="text-align:center;padding:5px 8px">Agendadas</th>
+          <th style="text-align:center;padding:5px 8px">%</th>
         </tr></thead>
         <tbody>${realizadas.map(p=>`<tr style="border-top:0.5px solid var(--border)">
           <td style="padding:5px 8px">${esc(p.nome)}</td>
           <td style="padding:5px 8px;color:var(--text2)">${esc(p.cliente)||'—'}</td>
           <td style="text-align:center;padding:5px 8px;font-weight:600;color:var(--green)">${p.realizadas}</td>
           <td style="text-align:center;padding:5px 8px;color:var(--text2)">${p.agendadas}</td>
+          <td style="text-align:center;padding:5px 8px;color:var(--text2)">${p.pct}%</td>
         </tr>`).join('')}</tbody>
       </table>
     </div>`;

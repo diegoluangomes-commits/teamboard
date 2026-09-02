@@ -3,7 +3,7 @@ name: Notificação diária de agendas
 on:
   schedule:
     # Todo dia às 10:00 UTC = 07:00 Brasília (UTC-3) — segunda a sexta
-    - cron: '0 10 * * 1-5'
+    - cron: '0 7 * * 1-5'   # 07:00 UTC = 04:00 Brasília + atraso GitHub Actions (1-4h) = ~07:00-08:00 Brasília
   workflow_dispatch: # permite disparar manualmente para teste
 
 jobs:
