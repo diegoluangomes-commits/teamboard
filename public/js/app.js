@@ -878,23 +878,51 @@ function aplicarAvisoPeriodo(t){
   const temPeriodo=t.dateStart&&t.dateEnd&&t.dateStart!==t.dateEnd;
   if(!temPeriodo){box.style.display='none';return;}
 
-  // Conta os dias úteis do período e quantos já foram marcados
-  const uteis=[];
   const ini=new Date(t.dateStart+'T00:00:00'), fim=new Date(t.dateEnd+'T00:00:00');
+  const fer=getFeriadosAno(t.dateStart.slice(0,4));
+  const uteis=[], feriadosDoPeriodo=[];
+
   for(let d=new Date(ini);d<=fim;d.setDate(d.getDate()+1)){
     const dow=d.getDay();
-    if(dow!==0&&dow!==6)uteis.push(d.toISOString().slice(0,10));
+    const ds=d.toISOString().slice(0,10);
+    if(dow===0||dow===6) continue;
+    if(fer&&fer[ds]){ feriadosDoPeriodo.push({ds,nome:fer[ds]}); continue; }
+    uteis.push(ds);
   }
   const feitos=uteis.filter(d=>getDailyStatus(t.id,d)==='done').length;
   const total=uteis.length;
   const completo=total>0&&feitos===total;
 
+  // Calcular sugestão de nova data final mantendo o mesmo nº de dias úteis
+  let sugestao='';
+  if(feriadosDoPeriodo.length){
+    let diasRestantes=feriadosDoPeriodo.length;
+    let cursor=new Date(fim);
+    while(diasRestantes>0){
+      cursor.setDate(cursor.getDate()+1);
+      const dow=cursor.getDay();
+      const ds=cursor.toISOString().slice(0,10);
+      if(dow===0||dow===6) continue;
+      if(fer&&fer[ds]) continue; // outro feriado
+      diasRestantes--;
+    }
+    sugestao=cursor.toLocaleDateString('pt-BR');
+  }
+
   box.style.display='block';
-  box.innerHTML=`
+  const avisoFeriados=feriadosDoPeriodo.length?`
+    <div style="background:#FFF3CD;border:0.5px solid #EF9F27;color:#7A4A00;border-radius:var(--r-md);padding:9px 11px;font-size:11px;margin-bottom:8px">
+      <div style="font-weight:600;margin-bottom:4px">⚠️ ${feriadosDoPeriodo.length} feriado${feriadosDoPeriodo.length>1?'s':''} no período:</div>
+      <div style="margin-bottom:6px">${feriadosDoPeriodo.map(f=>`• ${new Date(f.ds+'T00:00:00').toLocaleDateString('pt-BR')} — ${esc(f.nome)}`).join('<br>')}</div>
+      <div>O período tem <strong>${total} dia${total!==1?'s':''} útil${total!==1?'s':''}</strong> (feriados excluídos).
+      ${sugestao?`Para manter ${total+feriadosDoPeriodo.length} dias úteis, a data final sugerida é <strong>${sugestao}</strong>.`:''}</div>
+    </div>`:'' ;
+
+  box.innerHTML=avisoFeriados+`
     <div style="background:${completo?'var(--green-bg)':'var(--blue-bg)'};border:0.5px solid ${completo?'#97C459':'#85B7EB'};
                 color:${completo?'#27500A':'#0C447C'};border-radius:var(--r-md);padding:9px 11px;font-size:11px;margin-bottom:11px">
       <div style="font-weight:600;margin-bottom:3px">
-        📅 Agenda de ${total} dia${total===1?'':'s'} · ${feitos} de ${total} realizado${feitos===1?'':'s'}
+        📅 Agenda de ${total} dia${total===1?'':'s'} útil${total===1?'':'s'} · ${feitos} de ${total} realizado${feitos===1?'':'s'}
       </div>
       <div style="line-height:1.4">
         ${completo
@@ -1837,9 +1865,13 @@ function renderCalendar(){
     const start=t.dateStart||t.date||'';
     const end=t.dateEnd||t.date||'';
     if(!start && !end) return false;
-    // Agenda desmarcada pelo cliente some do calendário
     if(getDailyStatus(t.id, ds)==='cancel') return false;
     if(t.status==='cancel' && !hasPeriod(t)) return false;
+    // Feriado: tarefa de período não aparece no dia (igual fim de semana)
+    if(hasPeriod(t)){
+      const fer=getFeriadosAno(ds.slice(0,4));
+      if(fer && fer[ds]) return false;
+    }
     if(start && end) return ds>=start && ds<=end;
     return ds===start || ds===end;
   }
@@ -2041,9 +2073,13 @@ function calRenderDayList(ft, day){
     const start=t.dateStart||t.date||'';
     const end=t.dateEnd||t.date||'';
     if(!start&&!end)return false;
-    // Agenda desmarcada pelo cliente some do calendário
-    if(getDailyStatus(t.id, ds)==='cancel')return false;
-    if(t.status==='cancel' && !hasPeriod(t))return false;
+    if(getDailyStatus(t.id,ds)==='cancel')return false;
+    if(t.status==='cancel'&&!hasPeriod(t))return false;
+    // Feriado: tarefa de período não aparece no dia (igual fim de semana)
+    if(hasPeriod(t)){
+      const fer=getFeriadosAno(ds.slice(0,4));
+      if(fer&&fer[ds])return false;
+    }
     if(start&&end)return ds>=start&&ds<=end;
     return ds===start||ds===end;
   }
