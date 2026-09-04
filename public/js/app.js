@@ -721,8 +721,8 @@ function taskHTML(t) {
       <div class="fr"><label>Prazo</label><input type="date" id="f-date" value="${t?.date||''}"/></div>
     </div>
     <div class="f2">
-      <div class="fr"><label>Data início</label><input type="date" id="f-date-start" value="${t?.dateStart||''}"/></div>
-      <div class="fr"><label>Data fim</label><input type="date" id="f-date-end" value="${t?.dateEnd||''}"/></div>
+      <div class="fr"><label>Data início</label><input type="date" id="f-date-start" value="${t?.dateStart||''}" onchange="aplicarAvisoPeriodoForm()"/></div>
+      <div class="fr"><label>Data fim</label><input type="date" id="f-date-end" value="${t?.dateEnd||''}" onchange="aplicarAvisoPeriodoForm()"/></div>
     </div>
     <div class="f2">
       <div class="fr"><label>Turno</label>
@@ -834,7 +834,7 @@ function taskHTML(t) {
     </div>
   </div>`;
 }
-function openTaskModal(gi=0){editingTask=null;showModal(taskHTML(null));$('f-group').value=gi;}
+function openTaskModal(gi=0){editingTask=null;showModal(taskHTML(null));$('f-group').value=gi;aplicarAvisoPeriodoForm();}
 
 // Duplica a tarefa aberta — mantém os dados e limpa as datas para o novo dia
 function duplicateTask(){
@@ -872,6 +872,14 @@ function openEditTask(id){
 }
 
 // Tarefas com período são contadas dia a dia — avisa o usuário e trava o Status para não-admin
+// Versão chamada pelo onchange dos campos de data — lê valores atuais do form
+function aplicarAvisoPeriodoForm(){
+  const dateStart=$('f-date-start')?.value||'';
+  const dateEnd=$('f-date-end')?.value||'';
+  const taskId=editingTask||'';
+  aplicarAvisoPeriodo({dateStart, dateEnd, id:taskId});
+}
+
 function aplicarAvisoPeriodo(t){
   const box=$('f-periodo-aviso');
   if(!box||!t)return;
