@@ -922,7 +922,7 @@ function aplicarAvisoPeriodo(t){
     <div style="background:#FFF3CD;border:0.5px solid #EF9F27;color:#7A4A00;border-radius:var(--r-md);padding:9px 11px;font-size:11px;margin-bottom:8px">
       <div style="font-weight:600;margin-bottom:4px">⚠️ ${feriadosDoPeriodo.length} feriado${feriadosDoPeriodo.length>1?'s':''} no período:</div>
       <div style="margin-bottom:6px">${feriadosDoPeriodo.map(f=>`• ${new Date(f.ds+'T00:00:00').toLocaleDateString('pt-BR')} — ${esc(f.nome)}`).join('<br>')}</div>
-      <div>O período tem <strong>${total} dia${total!==1?'s':''} útil${total!==1?'s':''}</strong> (feriados excluídos).
+      <div>O período tem <strong>${total} dia${total===1?'':'s'} útil${total===1?'':'eis'}</strong> (feriados excluídos).
       ${sugestao?`Para manter ${total+feriadosDoPeriodo.length} dias úteis, a data final sugerida é <strong>${sugestao}</strong>.`:''}</div>
     </div>`:'' ;
 
@@ -930,7 +930,7 @@ function aplicarAvisoPeriodo(t){
     <div style="background:${completo?'var(--green-bg)':'var(--blue-bg)'};border:0.5px solid ${completo?'#97C459':'#85B7EB'};
                 color:${completo?'#27500A':'#0C447C'};border-radius:var(--r-md);padding:9px 11px;font-size:11px;margin-bottom:11px">
       <div style="font-weight:600;margin-bottom:3px">
-        📅 Agenda de ${total} dia${total===1?'':'s'} útil${total===1?'':'s'} · ${feitos} de ${total} realizado${feitos===1?'':'s'}
+        📅 Agenda de ${total} dia${total===1?'':'s'} útil${total===1?'':'eis'} · ${feitos} de ${total} realizado${feitos===1?'':'s'}
       </div>
       <div style="line-height:1.4">
         ${completo
