@@ -1898,7 +1898,7 @@ function renderCalendar(){
   // first: 0=Dom,1=Seg,2=Ter,3=Qua,4=Qui,5=Sex,6=Sáb
   // Na grade Seg-Sex: Seg=col0, Ter=col1, ... Sex=col4
   // Dom e Sáb não existem — se o mês começa no Dom, mostra 4 células vazias (Seg-Qui do mês anterior)
-  const firstAdj = first===0 ? 4 : (first===6 ? 0 : first-1);
+  const firstAdj = (first===0||first===6) ? 0 : first-1;
   for(let i=0;i<firstAdj;i++){
     const c=document.createElement('div');
     c.style.cssText='background:var(--surface2);padding:5px 7px;min-height:90px';
