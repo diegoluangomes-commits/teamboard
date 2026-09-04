@@ -1728,6 +1728,23 @@ function getFeriados(year){
   };
 }
 
+
+// Helper: retorna true se a data é dia útil (não é fim de semana nem feriado nacional)
+function isDiaUtil(ds, feriadosMap){
+  const d=new Date(ds+'T00:00:00');
+  const dow=d.getDay();
+  if(dow===0||dow===6) return false;          // fim de semana
+  if(feriadosMap && feriadosMap[ds]) return false; // feriado
+  return true;
+}
+
+// Cache de feriados por ano para não recalcular
+const _feriadosCache={};
+function getFeriadosAno(year){
+  if(!_feriadosCache[year]) _feriadosCache[year]=getFeriados(year);
+  return _feriadosCache[year];
+}
+
 let allCalTasks=[];
 let taskDailyStatus = {}; // { "taskId|YYYY-MM-DD": "done"|"pending" }
 
@@ -2084,15 +2101,20 @@ function calRenderDayList(ft, day){
       ?`event.stopPropagation();toggleDoneCalTask('${t.id}','${dateStr}')`
       :`event.stopPropagation();toggleDoneCalTask('${t.id}')`;
 
+    const dsFer=dateStr||t.dateStart||t.date||'';
+    const ferDs=getFeriadosAno(dsFer.slice(0,4));
+    const ehFeriado=!!(ferDs&&ferDs[dsFer]);
     return `<div data-task-id="${t.id}" data-date="${dateStr}" style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:0.5px solid var(--border);transition:background .1s;${isDone?'opacity:.75':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
       <div style="width:3px;height:40px;border-radius:2px;background:${ownerColor};flex-shrink:0"></div>
-      <div id="${checkId}" onclick="${onclick}" title="${isDone?'Marcar como pendente':'Marcar como realizado'}"
-        style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${isDone?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${isDone?'#3B6D11':'transparent'};flex-shrink:0">
-        ${isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
-      </div>
-      <div onclick="event.stopPropagation();desmarcarDia('${t.id}','${isPeriod?dateStr:''}')" title="Cliente desmarcou esta agenda"
-        style="width:18px;height:18px;border-radius:4px;border:1.5px solid #E8B4B4;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:#A32D2D;font-size:11px;line-height:1;flex-shrink:0;background:transparent"
-        onmouseover="this.style.background='#FCEBEB';this.style.borderColor='#A32D2D'" onmouseout="this.style.background='transparent';this.style.borderColor='#E8B4B4'">&#10005;</div>
+      ${ehFeriado
+        ? `<div style="width:18px;height:18px;border-radius:4px;border:1.5px solid #EF9F27;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px" title="Feriado — sem agenda">🏖</div>`
+        : `<div id="${checkId}" onclick="${onclick}" title="${isDone?'Marcar como pendente':'Marcar como realizado'}"
+          style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${isDone?'#3B6D11':'#ccc'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${isDone?'#3B6D11':'transparent'};flex-shrink:0">
+          ${isDone?'<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+        </div>
+        <div onclick="event.stopPropagation();desmarcarDia('${t.id}','${isPeriod?dateStr:''}')" title="Cliente desmarcou esta agenda"
+          style="width:18px;height:18px;border-radius:4px;border:1.5px solid #E8B4B4;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:#A32D2D;font-size:11px;line-height:1;flex-shrink:0;background:transparent"
+          onmouseover="this.style.background='#FCEBEB';this.style.borderColor='#A32D2D'" onmouseout="this.style.background='transparent';this.style.borderColor='#E8B4B4'">&#10005;</div>`}
       <div style="flex:1;min-width:0;cursor:pointer" onclick="openEditTask('${t.id}')">
         <div data-task-name="${nameId}" style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${isDone?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:6px">
@@ -3988,8 +4010,10 @@ async function exportRel2(){
         for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
           const dow=d.getDay(); if(dow===0||dow===6) continue;
           const dateStr=d.toISOString().slice(0,10);
+          const _fer=getFeriadosAno(dateStr.slice(0,4));
+          if(_fer&&_fer[dateStr]) continue; // feriado ignorado
           const sd=getDailyStatus(t.id,dateStr);
-          if(sd==='cancel') continue; // desmarcado pelo cliente não conta
+          if(sd==='cancel') continue;
           diasAgendados++;
           if(sd==='done') realizados++;
         }
@@ -4074,6 +4098,8 @@ async function exportRel3(){
         for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
           const dow=d.getDay(); if(dow===0||dow===6) continue;
           const dateStr=d.toISOString().slice(0,10);
+          const _fer2=getFeriadosAno(dateStr.slice(0,4));
+          if(_fer2&&_fer2[dateStr]) continue; // feriado
           if(getDailyStatus(t.id,dateStr)==='done') realizadas++;
         }
       } else {

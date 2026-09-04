@@ -78,6 +78,40 @@ function senhaFraca(senha) {
   return null;
 }
 
+// ── Feriados nacionais (fixos + móveis) para cálculos de dias úteis ──
+function getFeriadosNacionais(year){
+  // Cálculo da Páscoa (algoritmo de Meeus/Jones/Butcher)
+  const a=year%19,b=Math.floor(year/100),c=year%100;
+  const d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25);
+  const g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7;
+  const m=Math.floor((a+11*h+22*l)/451);
+  const month=Math.floor((h+l-7*m+114)/31);
+  const day=((h+l-7*m+114)%31)+1;
+  const pascoa=new Date(year,month-1,day);
+  const addDias=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r.toISOString().slice(0,10);};
+  const fmt=(m,d)=>`${year}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  return new Set([
+    fmt(1,1),fmt(4,21),fmt(5,1),fmt(9,7),fmt(10,12),
+    fmt(11,2),fmt(11,15),fmt(12,25),
+    addDias(pascoa,-48), // Carnaval 2a
+    addDias(pascoa,-47), // Carnaval 3a
+    addDias(pascoa,-2),  // Sexta-feira Santa
+    pascoa.toISOString().slice(0,10), // Páscoa
+    addDias(pascoa,60),  // Corpus Christi
+  ]);
+}
+const _ferCache={};
+function isFeriadoNacional(ds){
+  const y=ds.slice(0,4);
+  if(!_ferCache[y])_ferCache[y]=getFeriadosNacionais(+y);
+  return _ferCache[y].has(ds);
+}
+function isDiaUtil(ds){
+  const dow=new Date(ds+'T00:00:00').getDay();
+  return dow!==0&&dow!==6&&!isFeriadoNacional(ds);
+}
+
 // ── Auditoria ──────────────────────────────────────────────
 // Mapeia rota → nome legível da entidade
 const ENTIDADES = {
@@ -423,7 +457,6 @@ router.get('/ext/metas/progresso', requireApiKey, async (req, res) => {
         if (!temPeriodo) { if(t.status==='done') realizadas++; return; }
         const ini=new Date(t.date_start+'T00:00:00'), fim=new Date(t.date_end+'T00:00:00');
         for(let d=new Date(ini);d<=fim;d.setDate(d.getDate()+1)){
-          const dow=d.getDay(); if(dow===0||dow===6) continue;
           const ds=d.toISOString().slice(0,10);
           if(!ds.startsWith(mesStr)) continue;
           const st=dailyMap[t.id+'|'+ds];
@@ -1253,8 +1286,8 @@ router.post('/task-daily-status', async (req, res) => {
       const ini = new Date(t.date_start + 'T00:00:00');
       const fim = new Date(t.date_end + 'T00:00:00');
       for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
-        const dow = d.getDay();
-        if (dow !== 0 && dow !== 6) uteis.push(d.toISOString().slice(0, 10));
+        const ds2 = d.toISOString().slice(0, 10);
+        if (isDiaUtil(ds2)) uteis.push(ds2); // inclui feriados
       }
       const { rows: marcados } = await q(
         `SELECT date, status FROM task_daily_status WHERE task_id=$1 AND status IN ('done','cancel')`, [taskId]
@@ -1262,7 +1295,7 @@ router.post('/task-daily-status', async (req, res) => {
       const setDone   = new Set(marcados.filter(m => m.status === 'done').map(m => m.date));
       const setCancel = new Set(marcados.filter(m => m.status === 'cancel').map(m => m.date));
       // Dias desmarcados pelo cliente não impedem a conclusão da tarefa
-      const pendentes = uteis.filter(d => !setCancel.has(d));
+      const pendentes = uteis.filter(d => !setCancel.has(d) && isDiaUtil(d));
       const todosFeitos = pendentes.length > 0 && pendentes.every(d => setDone.has(d));
       const novo = todosFeitos ? 'done' : (t.status === 'done' ? 'progress' : t.status);
       if (novo !== t.status) {
@@ -1319,9 +1352,9 @@ router.get('/dashboard/detalhe-responsavel', async (req, res) => {
       } else {
         const ini = new Date(t.date_start+'T00:00:00'), fim = new Date(t.date_end+'T00:00:00');
         for (let d = new Date(ini); d <= fim; d.setDate(d.getDate()+1)) {
-          const dow = d.getDay(); if (dow===0||dow===6) continue;
           const ds = d.toISOString().slice(0,10);
           if (!ds.startsWith(mesStr)) continue;
+          if (!isDiaUtil(ds)) continue; // feriado
           const st = dailyMap[t.id+'|'+ds];
           if (st === 'cancel') continue;
           agendadas++;
@@ -1386,8 +1419,8 @@ router.get('/dashboard', async (req, res) => {
         const dow = d.getDay();
         if (dow === 0 || dow === 6) continue; // ignora fim de semana
         const ds = d.toISOString().slice(0, 10);
+        if (isFeriadoNacional(ds)) continue; // feriado ignorado
         const st = dailyMap[t.id + '|' + ds];
-        // Dia desmarcado pelo cliente sai do total agendado
         if (st === 'cancel') { desmarcados++; continue; }
         agendados++;
         dias.push(ds);
@@ -1679,10 +1712,9 @@ router.get('/metas/progresso', async (req, res) => {
           const ini = new Date(t.date_start+'T00:00:00');
           const fim = new Date(t.date_end+'T00:00:00');
           for (let d = new Date(ini); d <= fim; d.setDate(d.getDate()+1)) {
-            const dow = d.getDay();
-            if (dow===0||dow===6) continue;
             const ds = d.toISOString().slice(0,10);
             if (!ds.startsWith(mesStr)) continue;
+            if (!isDiaUtil(ds)) continue; // feriado
             const st = dailyMap[t.id+'|'+ds];
             if (st === 'cancel') continue;
             if (st === 'done') realizadas++;
